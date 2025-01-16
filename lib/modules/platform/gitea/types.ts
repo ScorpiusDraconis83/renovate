@@ -27,6 +27,7 @@ export interface PR {
   title: string;
   body: string;
   mergeable: boolean;
+  merged?: boolean;
   created_at: string;
   updated_at: string;
   closed_at: string;
@@ -137,8 +138,8 @@ export interface CommitStatus {
   id: number;
   status: CommitStatusType;
   context: string;
-  description: string;
-  target_url: string;
+  description?: string;
+  target_url?: string;
   created_at: string;
 }
 

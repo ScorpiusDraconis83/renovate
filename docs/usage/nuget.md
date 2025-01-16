@@ -118,13 +118,34 @@ Credentials for authenticated/private feeds can be given via host rules in the c
 }
 ```
 
-If you're using Azure DevOps, you can set `matchHost` to `pkgs.dev.azure.com`.
+If you use Azure DevOps:
+
+- set `matchHost` to `pkgs.dev.azure.com`
+- set the username, so Renovate can build the project when it creates the PR
 
 <!-- prettier-ignore -->
 !!! note
     Only Basic HTTP authentication (via username and password) is supported.
-    For Azure DevOps, you can use a PAT with `read` permissions on `Packaging` plus an empty username.
-    The generated `nuget.config` enforces basic authentication and cannot be overridden externally!
+    For Azure DevOps: use a PAT with `read` permissions on `Packaging`.
+    The username of the PAT must match the username of the _user of the PAT_.
+    The generated `nuget.config` forces the basic authentication, which cannot be overridden externally!
+
+## Ignoring package files when using presets
+
+Because `nuget` manager has a dedicated `ignorePaths` entry in the `:ignoreModulesAndTests` preset, if you're using any presets that extend it (like `config:recommended`), you need to put your `ignorePaths` inside the `nuget` section for it to be merged.
+For example:
+
+```json
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "nuget": {
+    "ignorePaths": ["IgnoreThisPackage/**"]
+  }
+}
+```
+
+Otherwise, all `nuget.ignorePaths` values in `:ignoreModulesAndTests` will override values you put inside `ignorePaths` at the top-level config.
 
 ## Future work
 

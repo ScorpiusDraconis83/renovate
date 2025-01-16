@@ -35,7 +35,7 @@ import { smartTruncate } from '../utils/pr-body';
 import { readOnlyIssueBody } from '../utils/read-only-issue-body';
 import * as comments from './comments';
 import { BitbucketPrCache } from './pr-cache';
-import { RepoInfo, Repositories } from './schema';
+import { RepoInfo, Repositories, UnresolvedPrTasks } from './schema';
 import type {
   Account,
   BitbucketStatus,
@@ -185,6 +185,7 @@ export async function getJsonFile(
 export async function initRepo({
   repository,
   cloneSubmodules,
+  cloneSubmodulesFilter,
   ignorePrAuthor,
   bbUseDevelopmentBranch,
 }: RepoParams): Promise<RepoResult> {
@@ -262,6 +263,7 @@ export async function initRepo({
     ...config,
     url,
     cloneSubmodules,
+    cloneSubmodulesFilter,
   });
   const repoConfig: RepoResult = {
     defaultBranch: mainBranch,
@@ -283,7 +285,7 @@ function matchesState(state: string, desiredState: string): boolean {
 }
 
 export async function getPrList(): Promise<Pr[]> {
-  logger.debug('getPrList()');
+  logger.trace('getPrList()');
   return await BitbucketPrCache.getPrs(
     bitbucketHttp,
     config.repository,
@@ -570,7 +572,7 @@ async function closeIssue(issueNumber: number): Promise<void> {
 
 export function massageMarkdown(input: string): string {
   // Remove any HTML we use
-  return smartTruncate(input, 50000)
+  return smartTruncate(input, maxBodyLength())
     .replace(
       'you tick the rebase/retry checkbox',
       'by renaming this PR to start with "rebase!"',
@@ -584,6 +586,10 @@ export function massageMarkdown(input: string): string {
     .replace(regEx(`\n---\n\n.*?<!-- rebase-check -->.*?\n`), '')
     .replace(regEx(/\]\(\.\.\/pull\//g), '](../../pull-requests/')
     .replace(regEx(/<!--renovate-(?:debug|config-hash):.*?-->/g), '');
+}
+
+export function maxBodyLength(): number {
+  return 50000;
 }
 
 export async function ensureIssue({
@@ -863,7 +869,7 @@ export async function createPr({
   targetBranch,
   prTitle: title,
   prBody: description,
-  platformOptions,
+  platformPrOptions,
 }: CreatePRConfig): Promise<Pr> {
   // labels is not supported in Bitbucket: https://bitbucket.org/site/master/issues/11976/ability-to-add-labels-to-pull-requests-bb
 
@@ -873,7 +879,7 @@ export async function createPr({
 
   let reviewers: Account[] = [];
 
-  if (platformOptions?.bbUseDefaultReviewers) {
+  if (platformPrOptions?.bbUseDefaultReviewers) {
     const reviewersResponse = (
       await bitbucketHttp.getJson<PagedResult<EffectiveReviewer>>(
         `/2.0/repositories/${config.repository}/effective-default-reviewers`,
@@ -915,12 +921,15 @@ export async function createPr({
       )
     ).body;
     const pr = utils.prInfo(prRes);
-    await BitbucketPrCache.addPr(
+    await BitbucketPrCache.setPr(
       bitbucketHttp,
       config.repository,
       renovateUserUuid,
       pr,
     );
+    if (platformPrOptions?.bbAutoResolvePrTasks) {
+      await autoResolvePrTasks(pr);
+    }
     return pr;
   } catch (err) /* istanbul ignore next */ {
     // Try sanitizing reviewers
@@ -942,14 +951,61 @@ export async function createPr({
         )
       ).body;
       const pr = utils.prInfo(prRes);
-      await BitbucketPrCache.addPr(
+      await BitbucketPrCache.setPr(
         bitbucketHttp,
         config.repository,
         renovateUserUuid,
         pr,
       );
+      if (platformPrOptions?.bbAutoResolvePrTasks) {
+        await autoResolvePrTasks(pr);
+      }
       return pr;
     }
+  }
+}
+
+async function autoResolvePrTasks(pr: Pr): Promise<void> {
+  logger.debug(`Auto resolve PR tasks in #${pr.number}`);
+  try {
+    const unResolvedTasks = (
+      await bitbucketHttp.getJson(
+        `/2.0/repositories/${config.repository}/pullrequests/${pr.number}/tasks`,
+        { paginate: true, pagelen: 100 },
+        UnresolvedPrTasks,
+      )
+    ).body;
+
+    logger.trace(
+      {
+        prId: pr.number,
+        listTaskRes: unResolvedTasks,
+      },
+      'List PR tasks',
+    );
+
+    for (const task of unResolvedTasks) {
+      const res = await bitbucketHttp.putJson(
+        `/2.0/repositories/${config.repository}/pullrequests/${pr.number}/tasks/${task.id}`,
+        {
+          body: {
+            state: 'RESOLVED',
+            content: {
+              raw: task.content.raw,
+            },
+          },
+        },
+      );
+      logger.trace(
+        {
+          prId: pr.number,
+          updateTaskResponse: res,
+        },
+        'Put PR tasks - mark resolved',
+      );
+    }
+  } catch (err) {
+    logger.warn({ prId: pr.number, err }, 'Error resolving PR tasks');
   }
 }
 
@@ -968,6 +1024,7 @@ export async function updatePr({
     )
   ).body;
 
+  let updatedPrRes: PrResponse;
   try {
     const body: any = {
       title,
@@ -982,10 +1039,12 @@ export async function updatePr({
       };
     }
 
-    await bitbucketHttp.putJson(
-      `/2.0/repositories/${config.repository}/pullrequests/${prNo}`,
-      { body },
-    );
+    updatedPrRes = (
+      await bitbucketHttp.putJson<PrResponse>(
+        `/2.0/repositories/${config.repository}/pullrequests/${prNo}`,
+        { body },
+      )
+    ).body;
   } catch (err) {
     // Try sanitizing reviewers
     const sanitizedReviewers = await sanitizeReviewers(pr.reviewers, err);
@@ -993,16 +1052,18 @@ export async function updatePr({
     if (sanitizedReviewers === undefined) {
       throw err;
     } else {
-      await bitbucketHttp.putJson(
-        `/2.0/repositories/${config.repository}/pullrequests/${prNo}`,
-        {
-          body: {
-            title,
-            description: sanitize(description),
-            reviewers: sanitizedReviewers,
+      updatedPrRes = (
+        await bitbucketHttp.putJson<PrResponse>(
+          `/2.0/repositories/${config.repository}/pullrequests/${prNo}`,
+          {
+            body: {
+              title,
+              description: sanitize(description),
+              reviewers: sanitizedReviewers,
+            },
           },
-        },
-      );
+        )
+      ).body;
     }
   }
 
@@ -1011,6 +1072,14 @@ export async function updatePr({
       `/2.0/repositories/${config.repository}/pullrequests/${prNo}/decline`,
     );
   }
+
+  // update pr cache
+  await BitbucketPrCache.setPr(
+    bitbucketHttp,
+    config.repository,
+    renovateUserUuid,
+    utils.prInfo({ ...updatedPrRes, ...(state && { state }) }),
+  );
 }
 
 export async function mergePr({

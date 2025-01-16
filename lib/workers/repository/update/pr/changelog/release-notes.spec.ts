@@ -28,12 +28,52 @@ jest.mock('../../../../../util/host-rules', () => mockDeep());
 
 const hostRules = mocked(_hostRules);
 
-const angularJsChangelogMd = Fixtures.get('angular-js.md', '..');
-const jestChangelogMd = Fixtures.get('jest.md', '..');
-const jsYamlChangelogMd = Fixtures.get('js-yaml.md', '..');
-const yargsChangelogMd = Fixtures.get('yargs.md', '..');
-const adapterutilsChangelogMd = Fixtures.get('adapter-utils.md', '..');
-const gitterWebappChangelogMd = Fixtures.get('gitter-webapp.md', '..');
+const angularJsChangelogMd = Fixtures.get('angular-js.md');
+const jestChangelogMd = Fixtures.get('jest.md');
+const jsYamlChangelogMd = Fixtures.get('js-yaml.md');
+const yargsChangelogMd = Fixtures.get('yargs.md');
+const adapterutilsChangelogMd = Fixtures.get('adapter-utils.md');
+const gitterWebappChangelogMd = Fixtures.get('gitter-webapp.md');
+
+const bitbucketTreeResponse = {
+  values: [
+    {
+      type: 'commit_directory',
+      path: 'lib',
+      commit: {
+        hash: '1234',
+      },
+    },
+    {
+      type: 'commit_file',
+      path: 'CHANGELOG',
+      commit: {
+        hash: 'cdef',
+      },
+    },
+    {
+      type: 'commit_file',
+      path: 'CHANGELOG.json',
+      commit: {
+        hash: 'defg',
+      },
+    },
+    {
+      type: 'commit_file',
+      path: 'CHANGELOG.md',
+      commit: {
+        hash: 'abcd',
+      },
+    },
+    {
+      type: 'commit_file',
+      path: 'RELEASE_NOTES.md',
+      commit: {
+        hash: 'asdf',
+      },
+    },
+  ],
+};
 
 const githubTreeResponse = {
   tree: [
@@ -52,6 +92,12 @@ const gitlabTreeResponse = [
   { path: 'CHANGELOG.md', name: 'CHANGELOG.md', type: 'blob', id: 'abcd' },
   { path: 'README.md', name: 'README.md', type: 'blob' },
 ];
+
+const bitbucketProject = partial<ChangeLogProject>({
+  type: 'bitbucket',
+  apiBaseUrl: 'https://api.bitbucket.org/',
+  baseUrl: 'https://bitbucket.org/',
+});
 
 const githubProject = partial<ChangeLogProject>({
   type: 'github',
@@ -600,7 +646,7 @@ describe('workers/repository/update/pr/changelog/release-notes', () => {
       });
     });
 
-    it('gets release notes with body "other-"', async () => {
+    it('gets release notes with body "other-" (packageName)', async () => {
       githubReleasesMock.mockResolvedValueOnce([
         {
           version: 'other-1.0.0',
@@ -626,6 +672,51 @@ describe('workers/repository/update/pr/changelog/release-notes', () => {
           ...githubProject,
           repository: 'some/other-repository',
           packageName: 'other',
+        },
+        partial<ChangeLogRelease>({
+          version: '1.0.1',
+          gitRef: '1.0.1',
+        }),
+        partial<BranchUpgradeConfig>(),
+      );
+      expect(res).toEqual({
+        body: 'some body [#123](https://github.com/some/other-repository/issues/123), [#124](https://github.com/some/yet-other-repository/issues/124)\n',
+        id: 2,
+        name: 'some/dep',
+        notesSourceUrl:
+          'https://api.github.com/repos/some/other-repository/releases',
+        tag: 'other-1.0.1',
+        url: 'https://github.com/some/other-repository/releases/other-1.0.1',
+      });
+    });
+
+    it('gets release notes with body "other-" (depName)', async () => {
+      githubReleasesMock.mockResolvedValueOnce([
+        {
+          version: 'other-1.0.0',
+          releaseTimestamp: '2020-01-01',
+          id: 1,
+          url: 'https://github.com/some/other-repository/releases/other-1.0.0',
+          name: 'some/dep',
+          description: 'some body',
+        },
+        {
+          version: 'other-1.0.1',
+          releaseTimestamp: '2020-01-01',
+          id: 2,
+          url: 'https://github.com/some/other-repository/releases/other-1.0.1',
+          name: 'some/dep',
+          description:
+            'some body #123, [#124](https://github.com/some/yet-other-repository/issues/124)',
+        },
+      ]);
+
+      const res = await getReleaseNotes(
+        {
+          ...githubProject,
+          repository: 'some/other-repository',
+          packageName: 'some.registry/some/other',
+          depName: 'other',
         },
         partial<ChangeLogRelease>({
           version: '1.0.1',
@@ -1034,6 +1125,31 @@ describe('workers/repository/update/pr/changelog/release-notes', () => {
         }),
       );
       expect(res).toBeNull();
+    });
+
+    it('handles bitbucket release notes link', async () => {
+      httpMock
+        .scope('https://api.bitbucket.org')
+        .get('/2.0/repositories/some-org/some-repo/src/HEAD?pagelen=100')
+        .reply(200, bitbucketTreeResponse)
+        .get('/2.0/repositories/some-org/some-repo/src/abcd/CHANGELOG.md')
+        .reply(200, angularJsChangelogMd);
+
+      const res = await getReleaseNotesMd(
+        {
+          ...bitbucketProject,
+          repository: 'some-org/some-repo',
+        },
+        partial<ChangeLogRelease>({
+          version: '1.6.9',
+          gitRef: '1.6.9',
+        }),
+      );
+      expect(res).toMatchObject({
+        notesSourceUrl:
+          'https://bitbucket.org/some-org/some-repo/src/HEAD/CHANGELOG.md',
+        url: 'https://bitbucket.org/some-org/some-repo/src/HEAD/CHANGELOG.md#169-fiery-basilisk-2018-02-02',
+      });
     });
 
     it('parses angular.js', async () => {

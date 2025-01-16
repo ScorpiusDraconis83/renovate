@@ -9,6 +9,7 @@ import { get } from '../../../modules/manager';
 import { detectSemanticCommits } from '../../../util/git/semantic';
 import { applyPackageRules } from '../../../util/package-rules';
 import { regEx } from '../../../util/regex';
+import * as template from '../../../util/template';
 import { parseUrl } from '../../../util/url';
 import type { BranchUpgradeConfig } from '../../types';
 import { generateBranchName } from './branch-name';
@@ -56,6 +57,12 @@ export function applyUpdateConfig(input: BranchUpgradeConfig): any {
         '',
       ); // remove everything up to the last slash
     }
+  }
+  if (updateConfig.sourceDirectory) {
+    updateConfig.sourceDirectory = template.compile(
+      updateConfig.sourceDirectory,
+      updateConfig,
+    );
   }
   generateBranchName(updateConfig);
   return updateConfig;
@@ -113,7 +120,10 @@ export async function flattenUpdates(
               depConfig.datasource,
             );
             updateConfig = mergeChildConfig(updateConfig, datasourceConfig);
-            updateConfig = applyPackageRules(updateConfig);
+            updateConfig = await applyPackageRules(
+              updateConfig,
+              'datasource-merge',
+            );
             // apply major/minor/patch/pin/digest
             updateConfig = mergeChildConfig(
               updateConfig,
@@ -123,7 +133,10 @@ export async function flattenUpdates(
               delete updateConfig[updateType];
             }
             // Apply again in case any were added by the updateType config
-            updateConfig = applyPackageRules(updateConfig);
+            updateConfig = await applyPackageRules(
+              updateConfig,
+              'update-type-merge',
+            );
             updateConfig = applyUpdateConfig(updateConfig);
             updateConfig.baseDeps = packageFile.deps;
             update.branchName = updateConfig.branchName;
@@ -143,13 +156,19 @@ export async function flattenUpdates(
         );
         lockFileConfig.updateType = 'lockFileMaintenance';
         lockFileConfig.isLockFileMaintenance = true;
-        lockFileConfig = applyPackageRules(lockFileConfig);
+        lockFileConfig = await applyPackageRules(
+          lockFileConfig,
+          'lock-file-maintenance-merge',
+        );
         // Apply lockFileMaintenance and packageRules again
         lockFileConfig = mergeChildConfig(
           lockFileConfig,
           lockFileConfig.lockFileMaintenance,
         );
-        lockFileConfig = applyPackageRules(lockFileConfig);
+        lockFileConfig = await applyPackageRules(
+          lockFileConfig,
+          'lock-file-maintenance-merge-2',
+        );
         // Remove unnecessary objects
         for (const updateType of updateTypes) {
           delete lockFileConfig[updateType];

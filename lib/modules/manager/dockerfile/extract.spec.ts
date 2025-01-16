@@ -1,3 +1,4 @@
+import { codeBlock } from 'common-tags';
 import { Fixtures } from '../../../../test/fixtures';
 import type { PackageDependency } from '../types';
 import { extractVariables, getDep } from './extract';
@@ -27,6 +28,40 @@ describe('modules/manager/dockerfile/extract', () => {
           depName: 'node',
           depType: 'final',
           replaceString: 'node',
+        },
+      ]);
+    });
+
+    it('handles run --mount=from', () => {
+      const res = extractPackageFile(
+        'FROM scratch as build\n' +
+          'FROM scratch as final\n' +
+          'RUN --mount=from=ghcr.io/astral-sh/uv,source=/uv,target=/bin/uv uv pip install numpy\n' +
+          'RUN --mount=type=cache,from=example.com/cache/image,target=/root/.cache pip install numpy\n' +
+          'RUN --mount=type=bind,from=build,source=/project/dist/lib.whl,target=/dist/lib.whl pip install /dist/lib.whl\n',
+        '',
+        {},
+      )?.deps;
+      expect(res).toEqual([
+        {
+          autoReplaceStringTemplate:
+            '{{depName}}{{#if newValue}}:{{newValue}}{{/if}}{{#if newDigest}}@{{newDigest}}{{/if}}',
+          currentDigest: undefined,
+          currentValue: undefined,
+          datasource: 'docker',
+          depName: 'ghcr.io/astral-sh/uv',
+          depType: 'stage',
+          replaceString: 'ghcr.io/astral-sh/uv',
+        },
+        {
+          autoReplaceStringTemplate:
+            '{{depName}}{{#if newValue}}:{{newValue}}{{/if}}{{#if newDigest}}@{{newDigest}}{{/if}}',
+          currentDigest: undefined,
+          currentValue: undefined,
+          datasource: 'docker',
+          depName: 'example.com/cache/image',
+          depType: 'final',
+          replaceString: 'example.com/cache/image',
         },
       ]);
     });
@@ -330,6 +365,26 @@ describe('modules/manager/dockerfile/extract', () => {
       ]);
     });
 
+    it('extracts tags from Dockerfile which begins with a BOM marker', () => {
+      const res = extractPackageFile(
+        '\uFEFFFROM node:6.12.3 as frontend\n\n',
+        '',
+        {},
+      )?.deps;
+      expect(res).toEqual([
+        {
+          autoReplaceStringTemplate:
+            '{{depName}}{{#if newValue}}:{{newValue}}{{/if}}{{#if newDigest}}@{{newDigest}}{{/if}}',
+          currentDigest: undefined,
+          currentValue: '6.12.3',
+          datasource: 'docker',
+          depName: 'node',
+          depType: 'final',
+          replaceString: 'node:6.12.3',
+        },
+      ]);
+    });
+
     it('skips scratches', () => {
       const res = extractPackageFile('FROM scratch\nADD foo\n', '', {});
       expect(res).toBeNull();
@@ -375,6 +430,31 @@ describe('modules/manager/dockerfile/extract', () => {
       ]);
     });
 
+    it('handles COPY --link --from', () => {
+      const res = extractPackageFile(
+        codeBlock`
+          FROM scratch
+          COPY --link --from=gcr.io/k8s-skaffold/skaffold:v0.11.0 /usr/bin/skaffold /usr/bin/skaffold
+        `,
+        '',
+        {},
+      );
+      expect(res).toEqual({
+        deps: [
+          {
+            autoReplaceStringTemplate:
+              '{{depName}}{{#if newValue}}:{{newValue}}{{/if}}{{#if newDigest}}@{{newDigest}}{{/if}}',
+            currentDigest: undefined,
+            currentValue: 'v0.11.0',
+            datasource: 'docker',
+            depName: 'gcr.io/k8s-skaffold/skaffold',
+            depType: 'final',
+            replaceString: 'gcr.io/k8s-skaffold/skaffold:v0.11.0',
+          },
+        ],
+      });
+    });
+
     it('skips named multistage COPY --from tags', () => {
       const res = extractPackageFile(
         'FROM node:6.12.3 as frontend\n\n# comment\nENV foo=bar\nCOPY --from=frontend /usr/bin/node /usr/bin/node\n',
@@ -417,7 +497,7 @@ describe('modules/manager/dockerfile/extract', () => {
 
     it('detects ["stage"] and ["final"] deps of docker multi-stage build.', () => {
       const res = extractPackageFile(
-        'FROM node:8.15.1-alpine as skippedfrom\nFROM golang:1.7.3 as builder\n\n# comment\nWORKDIR /go/src/github.com/alexellis/href-counter/\nRUN go get -d -v golang.org/x/net/html  \nCOPY app.go    .\nRUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o app .\n\nFROM alpine:latest  \nRUN apk --no-cache add ca-certificates\nWORKDIR /root/\nCOPY --from=builder /go/src/github.com/alexellis/href-counter/app .\nCMD ["./app"]\n',
+        'FROM node:8.15.1-alpine as skippedfrom\nFROM golang:1.23.3 as builder\n\n# comment\nWORKDIR /go/src/github.com/alexellis/href-counter/\nRUN go get -d -v golang.org/x/net/html  \nCOPY app.go    .\nRUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o app .\n\nFROM alpine:latest  \nRUN apk --no-cache add ca-certificates\nWORKDIR /root/\nCOPY --from=builder /go/src/github.com/alexellis/href-counter/app .\nCMD ["./app"]\n',
         '',
         {},
       )?.deps;
@@ -436,11 +516,11 @@ describe('modules/manager/dockerfile/extract', () => {
           autoReplaceStringTemplate:
             '{{depName}}{{#if newValue}}:{{newValue}}{{/if}}{{#if newDigest}}@{{newDigest}}{{/if}}',
           currentDigest: undefined,
-          currentValue: '1.7.3',
+          currentValue: '1.23.3',
           datasource: 'docker',
           depName: 'golang',
           depType: 'stage',
-          replaceString: 'golang:1.7.3',
+          replaceString: 'golang:1.23.3',
         },
         {
           autoReplaceStringTemplate:

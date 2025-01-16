@@ -1,5 +1,6 @@
 import type { BranchStatus } from '../../../types';
-import { GiteaHttp, GiteaHttpOptions } from '../../../util/http/gitea';
+import type { GiteaHttpOptions } from '../../../util/http/gitea';
+import { GiteaHttp } from '../../../util/http/gitea';
 import { getQueryString } from '../../../util/url';
 import type {
   Branch,
@@ -393,10 +394,7 @@ export const renovateToGiteaStatusMapping: Record<
 function filterStatus(data: CommitStatus[]): CommitStatus[] {
   const ret: Record<string, CommitStatus> = {};
   for (const i of data) {
-    if (
-      !ret[i.context] ||
-      new Date(ret[i.context].created_at) < new Date(i.created_at)
-    ) {
+    if (!ret[i.context] || ret[i.context].id < i.id) {
       ret[i.context] = i;
     }
   }
@@ -417,13 +415,14 @@ export async function getCombinedCommitStatus(
   });
 
   let worstState = 0;
-  for (const cs of filterStatus(res.body)) {
+  const statuses = filterStatus(res.body);
+  for (const cs of statuses) {
     worstState = Math.max(worstState, commitStatusStates.indexOf(cs.status));
   }
 
   return {
     worstStatus: commitStatusStates[worstState],
-    statuses: res.body,
+    statuses,
   };
 }
 

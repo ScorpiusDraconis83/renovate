@@ -1,4 +1,5 @@
-import { lexer, parser, query as q } from 'good-enough-parser';
+import type { lexer, parser } from 'good-enough-parser';
+import { query as q } from 'good-enough-parser';
 import { clone } from '../../../../util/clone';
 import { regEx } from '../../../../util/regex';
 import type {
@@ -266,23 +267,13 @@ export const qTemplateString = q
       ctx.tmpTokenStore.templateTokens = [];
       return ctx;
     },
-    search: q.alt(
-      qStringValue.handler((ctx) => {
+    search: q
+      .alt(qStringValue, qPropertyAccessIdentifier, qVariableAccessIdentifier)
+      .handler((ctx) => {
         ctx.tmpTokenStore.templateTokens?.push(...ctx.varTokens);
         ctx.varTokens = [];
         return ctx;
       }),
-      qPropertyAccessIdentifier.handler((ctx) => {
-        ctx.tmpTokenStore.templateTokens?.push(...ctx.varTokens);
-        ctx.varTokens = [];
-        return ctx;
-      }),
-      qVariableAccessIdentifier.handler((ctx) => {
-        ctx.tmpTokenStore.templateTokens?.push(...ctx.varTokens);
-        ctx.varTokens = [];
-        return ctx;
-      }),
-    ),
   })
   .handler((ctx) => {
     ctx.varTokens = ctx.tmpTokenStore.templateTokens!;
@@ -312,3 +303,32 @@ export const qKotlinImport = q
     return ctx;
   })
   .handler(cleanupTempVars);
+
+// foo { bar { baz } }
+// foo.bar { baz }
+export const qDotOrBraceExpr = (
+  symValue: q.SymMatcherValue,
+  matcher: q.QueryBuilder<Ctx, parser.Node>,
+): q.QueryBuilder<Ctx, parser.Node> =>
+  q.sym<Ctx>(symValue).alt(
+    q.op<Ctx>('.').join(matcher),
+    q.tree({
+      type: 'wrapped-tree',
+      maxDepth: 1,
+      startsWith: '{',
+      endsWith: '}',
+      search: matcher,
+    }),
+  );
+
+export const qGroupId = qValueMatcher.handler((ctx) =>
+  storeInTokenMap(ctx, 'groupId'),
+);
+
+export const qArtifactId = qValueMatcher.handler((ctx) =>
+  storeInTokenMap(ctx, 'artifactId'),
+);
+
+export const qVersion = qValueMatcher.handler((ctx) =>
+  storeInTokenMap(ctx, 'version'),
+);

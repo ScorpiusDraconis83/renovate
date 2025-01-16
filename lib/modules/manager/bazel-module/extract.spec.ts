@@ -4,7 +4,9 @@ import { Fixtures } from '../../../../test/fixtures';
 import { GlobalConfig } from '../../../config/global';
 import type { RepoGlobalConfig } from '../../../config/types';
 import { BazelDatasource } from '../../datasource/bazel';
+import { DockerDatasource } from '../../datasource/docker';
 import { GithubTagsDatasource } from '../../datasource/github-tags';
+import { MavenDatasource } from '../../datasource/maven';
 import * as parser from './parser';
 import { extractPackageFile } from '.';
 
@@ -234,6 +236,187 @@ describe('modules/manager/bazel-module/extract', () => {
           registryUrls: ['https://example.com/custom_registry'],
         },
       ]);
+    });
+
+    it('returns maven.install and maven.artifact dependencies', async () => {
+      const input = codeBlock`
+        maven.artifact(
+            artifact = "core.specs.alpha",
+            exclusions = ["org.clojure:clojure"],
+            group = "org.clojure",
+            version = "0.2.56",
+        )
+
+        maven.install(
+            artifacts = [
+                "junit:junit:4.13.2",
+                "com.google.guava:guava:31.1-jre",
+            ],
+            lock_file = "//:maven_install.json",
+            repositories = [
+                "https://repo1.maven.org/maven2/",
+            ],
+            version_conflict_policy = "pinned",
+        )
+      `;
+      const result = await extractPackageFile(input, 'MODULE.bazel');
+      if (!result) {
+        throw new Error('Expected a result.');
+      }
+      expect(result.deps).toEqual([
+        {
+          datasource: MavenDatasource.id,
+          depType: 'maven_install',
+          depName: 'junit:junit',
+          currentValue: '4.13.2',
+          registryUrls: ['https://repo1.maven.org/maven2/'],
+          versioning: 'gradle',
+        },
+        {
+          datasource: MavenDatasource.id,
+          depType: 'maven_install',
+          depName: 'com.google.guava:guava',
+          currentValue: '31.1-jre',
+          registryUrls: ['https://repo1.maven.org/maven2/'],
+          versioning: 'gradle',
+        },
+        {
+          datasource: MavenDatasource.id,
+          depType: 'maven_install',
+          depName: 'org.clojure:core.specs.alpha',
+          currentValue: '0.2.56',
+          registryUrls: ['https://repo1.maven.org/maven2/'],
+          versioning: 'gradle',
+        },
+      ]);
+    });
+
+    it('returns oci.pull dependencies', async () => {
+      const input = codeBlock`
+        oci.pull(
+          name = "nginx_image",
+          digest = "sha256:287ff321f9e3cde74b600cc26197424404157a72043226cbbf07ee8304a2c720",
+          image = "index.docker.io/library/nginx",
+          platforms = ["linux/amd64"],
+          tag = "1.27.1",
+        )
+      `;
+
+      const result = await extractPackageFile(input, 'MODULE.bazel');
+      if (!result) {
+        throw new Error('Expected a result.');
+      }
+      expect(result.deps).toEqual([
+        {
+          datasource: DockerDatasource.id,
+          depType: 'oci_pull',
+          depName: 'nginx_image',
+          packageName: 'index.docker.io/library/nginx',
+          currentValue: '1.27.1',
+          currentDigest:
+            'sha256:287ff321f9e3cde74b600cc26197424404157a72043226cbbf07ee8304a2c720',
+        },
+      ]);
+    });
+
+    it('returns oci.pull dependencies without tags', async () => {
+      const input = codeBlock`
+        oci.pull(
+          name = "nginx_image",
+          digest = "sha256:287ff321f9e3cde74b600cc26197424404157a72043226cbbf07ee8304a2c720",
+          image = "index.docker.io/library/nginx",
+          platforms = ["linux/amd64"],
+        )
+      `;
+
+      const result = await extractPackageFile(input, 'MODULE.bazel');
+      if (!result) {
+        throw new Error('Expected a result.');
+      }
+      expect(result.deps).toEqual([
+        {
+          datasource: DockerDatasource.id,
+          depType: 'oci_pull',
+          depName: 'nginx_image',
+          packageName: 'index.docker.io/library/nginx',
+          currentDigest:
+            'sha256:287ff321f9e3cde74b600cc26197424404157a72043226cbbf07ee8304a2c720',
+        },
+      ]);
+    });
+
+    it('returns maven.install and bazel_dep dependencies together', async () => {
+      const input = codeBlock`
+        bazel_dep(name = "bazel_jar_jar", version = "0.1.0")
+
+        maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
+
+        maven.install(
+            artifacts = [
+                "junit:junit:4.13.2",
+                "com.google.guava:guava:31.1-jre",
+            ],
+            lock_file = "//:maven_install.json",
+            repositories = [
+                "https://repo1.maven.org/maven2/",
+            ],
+            version_conflict_policy = "pinned",
+        )
+      `;
+      const result = await extractPackageFile(input, 'MODULE.bazel');
+      if (!result) {
+        throw new Error('Expected a result.');
+      }
+      expect(result.deps).toEqual([
+        {
+          datasource: BazelDatasource.id,
+          depType: 'bazel_dep',
+          depName: 'bazel_jar_jar',
+          currentValue: '0.1.0',
+        },
+        {
+          datasource: MavenDatasource.id,
+          depType: 'maven_install',
+          depName: 'junit:junit',
+          currentValue: '4.13.2',
+          registryUrls: ['https://repo1.maven.org/maven2/'],
+          versioning: 'gradle',
+        },
+        {
+          datasource: MavenDatasource.id,
+          depType: 'maven_install',
+          depName: 'com.google.guava:guava',
+          currentValue: '31.1-jre',
+          registryUrls: ['https://repo1.maven.org/maven2/'],
+          versioning: 'gradle',
+        },
+      ]);
+    });
+
+    it('returns git_repository dependencies', async () => {
+      const input = codeBlock`
+        git_repository(
+            name = "rules_foo",
+            commit = "850cb49c8649e463b80ef7984e7c744279746170",
+            remote = "https://github.com/example/rules_foo.git",
+        )
+        `;
+      const result = await extractPackageFile(input, 'MODULE.bazel');
+      if (!result) {
+        throw new Error('Expected a result.');
+      }
+      expect(result.deps).toHaveLength(1);
+      expect(result.deps).toEqual(
+        expect.arrayContaining([
+          {
+            datasource: GithubTagsDatasource.id,
+            depType: 'git_repository',
+            depName: 'rules_foo',
+            currentDigest: '850cb49c8649e463b80ef7984e7c744279746170',
+            packageName: 'example/rules_foo',
+          },
+        ]),
+      );
     });
   });
 });

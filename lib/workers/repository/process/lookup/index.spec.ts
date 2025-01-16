@@ -4,12 +4,15 @@ import { Fixtures } from '../../../../../test/fixtures';
 import * as httpMock from '../../../../../test/http-mock';
 import { partial } from '../../../../../test/util';
 import { getConfig } from '../../../../config/defaults';
+import { supportedDatasources as presetSupportedDatasources } from '../../../../config/presets/internal/merge-confidence';
+import type { AllConfig } from '../../../../config/types';
 import { CONFIG_VALIDATION } from '../../../../constants/error-messages';
 import { CustomDatasource } from '../../../../modules/datasource/custom';
 import { DockerDatasource } from '../../../../modules/datasource/docker';
 import { GitRefsDatasource } from '../../../../modules/datasource/git-refs';
 import { GithubReleasesDatasource } from '../../../../modules/datasource/github-releases';
 import { GithubTagsDatasource } from '../../../../modules/datasource/github-tags';
+import { GoDatasource } from '../../../../modules/datasource/go';
 import { MavenDatasource } from '../../../../modules/datasource/maven';
 import { NpmDatasource } from '../../../../modules/datasource/npm';
 import { PackagistDatasource } from '../../../../modules/datasource/packagist';
@@ -62,6 +65,10 @@ describe('workers/repository/process/lookup/index', () => {
   );
 
   const getMavenReleases = jest.spyOn(MavenDatasource.prototype, 'getReleases');
+  const postprocessMavenRelease = jest.spyOn(
+    MavenDatasource.prototype,
+    'postprocessRelease',
+  );
 
   const getCustomDatasourceReleases = jest.spyOn(
     CustomDatasource.prototype,
@@ -151,8 +158,10 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'major',
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '1.4.1',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-05-17T04:25:07.299Z',
           updateType: 'major',
         },
@@ -206,8 +215,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 0,
           newMinor: 9,
+          newPatch: 7,
           newValue: '^0.9.0',
           newVersion: '0.9.7',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2013-09-04T17:07:22.948Z',
           updateType: 'minor',
         },
@@ -216,8 +227,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '^1.0.0',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-05-17T04:25:07.299Z',
           updateType: 'major',
         },
@@ -244,8 +257,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 0,
           newMinor: 4,
+          newPatch: 4,
           newValue: '^0.4.0',
           newVersion: '0.4.4',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2011-06-10T17:20:04.719Z',
           updateType: 'patch',
         },
@@ -254,8 +269,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 0,
           newMinor: 9,
+          newPatch: 7,
           newValue: '^0.9.0',
           newVersion: '0.9.7',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2013-09-04T17:07:22.948Z',
           updateType: 'minor',
         },
@@ -264,8 +281,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '^1.0.0',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-05-17T04:25:07.299Z',
           updateType: 'major',
         },
@@ -289,8 +308,10 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'non-major',
           newMajor: 0,
           newMinor: 9,
+          newPatch: 7,
           newValue: '0.9.7',
           newVersion: '0.9.7',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'minor',
         },
@@ -298,8 +319,10 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'major',
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '1.4.1',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'major',
         },
@@ -324,8 +347,10 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'patch',
           newMajor: 0,
           newMinor: 4,
+          newPatch: 4,
           newValue: '0.4.4',
           newVersion: '0.4.4',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'patch',
         },
@@ -333,8 +358,10 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'minor',
           newMajor: 0,
           newMinor: 9,
+          newPatch: 7,
           newValue: '0.9.7',
           newVersion: '0.9.7',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'minor',
         },
@@ -342,8 +369,10 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'major',
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '1.4.1',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'major',
         },
@@ -368,8 +397,10 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'latest',
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '1.4.1',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'major',
         },
@@ -401,8 +432,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 0,
           newMinor: 9,
+          newPatch: 7,
           newValue: '^0.9.0',
           newVersion: '0.9.7',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2013-09-04T17:07:22.948Z',
           updateType: 'minor',
         },
@@ -411,8 +444,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '^1.0.0',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-05-17T04:25:07.299Z',
           updateType: 'major',
         },
@@ -435,8 +470,10 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'non-major',
           newMajor: 0,
           newMinor: 9,
+          newPatch: 7,
           newValue: '0.9.7',
           newVersion: '0.9.7',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'minor',
         },
@@ -459,8 +496,10 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'non-major',
           newMajor: 0,
           newMinor: 9,
+          newPatch: 7,
           newValue: '0.9.7',
           newVersion: '0.9.7',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2013-09-04T17:07:22.948Z',
           updateType: 'minor',
         },
@@ -483,8 +522,10 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'non-major',
           newMajor: 0,
           newMinor: 9,
+          newPatch: 7,
           newValue: '0.9.7',
           newVersion: '0.9.7',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2013-09-04T17:07:22.948Z',
           updateType: 'minor',
         },
@@ -508,8 +549,10 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'non-major',
           newMajor: 0,
           newMinor: 9,
+          newPatch: 7,
           newValue: '0.9.7',
           newVersion: '0.9.7',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2013-09-04T17:07:22.948Z',
           updateType: 'minor',
         },
@@ -533,8 +576,10 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'non-major',
           newMajor: 0,
           newMinor: 9,
+          newPatch: 4,
           newValue: '0.9.4',
           newVersion: '0.9.4',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2013-05-22T20:26:50.888Z',
           updateType: 'minor',
         },
@@ -569,8 +614,10 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'non-major',
           newMajor: 0,
           newMinor: 9,
+          newPatch: 7,
           newValue: '0.9.7',
           newVersion: '0.9.7',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'patch',
         },
@@ -578,8 +625,10 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'major',
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '1.4.1',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'major',
         },
@@ -608,8 +657,10 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'non-major',
           newMajor: 0,
           newMinor: 9,
+          newPatch: 7,
           newValue: '0.9.7',
           newVersion: '0.9.7',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'patch',
         },
@@ -617,8 +668,10 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'major',
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '1.4.1',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'major',
         },
@@ -642,8 +695,10 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'patch',
           newMajor: 0,
           newMinor: 9,
+          newPatch: 7,
           newValue: '0.9.7',
           newVersion: '0.9.7',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2013-09-04T17:07:22.948Z',
           updateType: 'patch',
         },
@@ -651,8 +706,10 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'major',
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '1.4.1',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-05-17T04:25:07.299Z',
           updateType: 'major',
         },
@@ -676,8 +733,10 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'patch',
           newMajor: 0,
           newMinor: 8,
+          newPatch: 12,
           newValue: '0.8.12',
           newVersion: '0.8.12',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'patch',
         },
@@ -685,8 +744,10 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'minor',
           newMajor: 0,
           newMinor: 9,
+          newPatch: 7,
           newValue: '0.9.7',
           newVersion: '0.9.7',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'minor',
         },
@@ -694,8 +755,10 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'major',
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '1.4.1',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'major',
         },
@@ -727,8 +790,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '^1.0.0',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-05-17T04:25:07.299Z',
           updateType: 'major',
         },
@@ -752,8 +817,10 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'latest',
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '1.4.1',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-05-17T04:25:07.299Z',
           updateType: 'minor',
         },
@@ -776,12 +843,192 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'non-major',
           newMajor: 1,
           newMinor: 0,
+          newPatch: 1,
           newValue: '1.0.1',
           newVersion: '1.0.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'patch',
         },
       ]);
+    });
+
+    it('uses highest available version for vulnerabilityAlerts when vulnerabilityFixStrategy=highest', async () => {
+      config.currentValue = '1.0.0';
+      config.isVulnerabilityAlert = true;
+      config.vulnerabilityFixStrategy = 'highest';
+      config.packageName = 'q';
+      config.datasource = NpmDatasource.id;
+      httpMock.scope('https://registry.npmjs.org').get('/q').reply(200, qJson);
+
+      const { updates } = await Result.wrap(
+        lookup.lookupUpdates(config),
+      ).unwrapOrThrow();
+
+      expect(updates).toEqual([
+        {
+          bucket: 'non-major',
+          newMajor: 1,
+          newMinor: 4,
+          newPatch: 1,
+          newValue: '1.4.1',
+          newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
+          releaseTimestamp: expect.any(String),
+          updateType: 'minor',
+        },
+      ]);
+    });
+
+    it('uses vulnerabilityFixVersion when a version', async () => {
+      config.currentValue = '1.0.0';
+      config.isVulnerabilityAlert = true;
+      config.vulnerabilityFixVersion = '1.1.0';
+      config.packageName = 'q';
+      config.datasource = NpmDatasource.id;
+      httpMock.scope('https://registry.npmjs.org').get('/q').reply(200, qJson);
+
+      const { updates } = await Result.wrap(
+        lookup.lookupUpdates(config),
+      ).unwrapOrThrow();
+
+      expect(updates).toEqual([
+        {
+          bucket: 'non-major',
+          newMajor: 1,
+          newMinor: 1,
+          newPatch: 0,
+          newValue: '1.1.0',
+          newVersion: '1.1.0',
+          newVersionAgeInDays: expect.any(Number),
+          releaseTimestamp: expect.any(String),
+          updateType: 'minor',
+        },
+      ]);
+    });
+
+    it('takes a later release when vulnerabilityFixVersion does not exist', async () => {
+      config.currentValue = '1.0.0';
+      config.isVulnerabilityAlert = true;
+      config.vulnerabilityFixVersion = '1.0.2';
+      config.packageName = 'q';
+      config.datasource = NpmDatasource.id;
+      httpMock.scope('https://registry.npmjs.org').get('/q').reply(200, qJson);
+
+      const { updates } = await Result.wrap(
+        lookup.lookupUpdates(config),
+      ).unwrapOrThrow();
+
+      expect(updates).toEqual([
+        {
+          bucket: 'non-major',
+          newMajor: 1,
+          newMinor: 1,
+          newPatch: 0,
+          newValue: '1.1.0',
+          newVersion: '1.1.0',
+          newVersionAgeInDays: expect.any(Number),
+          releaseTimestamp: expect.any(String),
+          updateType: 'minor',
+        },
+      ]);
+    });
+
+    it('uses vulnerabilityFixVersion when a range', async () => {
+      config.currentValue = '1.0.0';
+      config.isVulnerabilityAlert = true;
+      config.vulnerabilityFixVersion = '>= 1.1.0';
+      config.packageName = 'q';
+      config.datasource = NpmDatasource.id;
+      httpMock.scope('https://registry.npmjs.org').get('/q').reply(200, qJson);
+
+      const { updates } = await Result.wrap(
+        lookup.lookupUpdates(config),
+      ).unwrapOrThrow();
+
+      expect(updates).toEqual([
+        {
+          bucket: 'non-major',
+          newMajor: 1,
+          newMinor: 1,
+          newPatch: 0,
+          newValue: '1.1.0',
+          newVersion: '1.1.0',
+          newVersionAgeInDays: expect.any(Number),
+          releaseTimestamp: expect.any(String),
+          updateType: 'minor',
+        },
+      ]);
+    });
+
+    it('takes highest available version when using vulnerabilityFixStrategy=highest with vulnerabilityFixVersion', async () => {
+      config.currentValue = '1.0.0';
+      config.isVulnerabilityAlert = true;
+      config.vulnerabilityFixVersion = '1.1.0';
+      config.vulnerabilityFixStrategy = 'highest';
+      config.packageName = 'q';
+      config.datasource = NpmDatasource.id;
+      httpMock.scope('https://registry.npmjs.org').get('/q').reply(200, qJson);
+
+      const { updates } = await Result.wrap(
+        lookup.lookupUpdates(config),
+      ).unwrapOrThrow();
+
+      expect(updates).toEqual([
+        {
+          bucket: 'non-major',
+          newMajor: 1,
+          newMinor: 4,
+          newPatch: 1,
+          newValue: '1.4.1',
+          newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
+          releaseTimestamp: expect.any(String),
+          updateType: 'minor',
+        },
+      ]);
+    });
+
+    it('ignores vulnerabilityFixVersion if not a version', async () => {
+      config.currentValue = '1.0.0';
+      config.isVulnerabilityAlert = true;
+      config.vulnerabilityFixVersion = 'abc';
+      config.packageName = 'q';
+      config.datasource = NpmDatasource.id;
+      httpMock.scope('https://registry.npmjs.org').get('/q').reply(200, qJson);
+
+      const { updates } = await Result.wrap(
+        lookup.lookupUpdates(config),
+      ).unwrapOrThrow();
+
+      expect(updates).toEqual([
+        {
+          bucket: 'non-major',
+          newMajor: 1,
+          newMinor: 0,
+          newPatch: 1,
+          newValue: '1.0.1',
+          newVersion: '1.0.1',
+          newVersionAgeInDays: expect.any(Number),
+          releaseTimestamp: expect.any(String),
+          updateType: 'patch',
+        },
+      ]);
+    });
+
+    it('returns no results if vulnerabilityFixVersion is too high', async () => {
+      config.currentValue = '1.0.0';
+      config.isVulnerabilityAlert = true;
+      config.vulnerabilityFixVersion = '5.1.0';
+      config.packageName = 'q';
+      config.datasource = NpmDatasource.id;
+      httpMock.scope('https://registry.npmjs.org').get('/q').reply(200, qJson);
+
+      const { updates } = await Result.wrap(
+        lookup.lookupUpdates(config),
+      ).unwrapOrThrow();
+
+      expect(updates).toBeEmptyArray();
     });
 
     it('supports minor and major upgrades for ranged versions', async () => {
@@ -808,8 +1055,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 0,
           newMinor: 9,
+          newPatch: 7,
           newValue: '~0.9.0',
           newVersion: '0.9.7',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2013-09-04T17:07:22.948Z',
           updateType: 'minor',
         },
@@ -818,8 +1067,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '~1.4.0',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-05-17T04:25:07.299Z',
           updateType: 'major',
         },
@@ -961,8 +1212,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '~1.4.0',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-05-17T04:25:07.299Z',
           updateType: 'major',
         },
@@ -993,8 +1246,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '~1.4.0',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-05-17T04:25:07.299Z',
           updateType: 'minor',
         },
@@ -1020,8 +1275,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '^1.2.1',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'minor',
         },
@@ -1047,8 +1304,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '^1.2.1',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'minor',
         },
@@ -1074,8 +1333,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 2,
+          newPatch: 1,
           newValue: '~1.2.0',
           newVersion: '1.2.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'patch',
         },
@@ -1100,8 +1361,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: undefined,
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'minor',
         },
@@ -1118,21 +1381,20 @@ describe('workers/repository/process/lookup/index', () => {
       const { updates } = await Result.wrap(
         lookup.lookupUpdates(config),
       ).unwrapOrThrow();
-      expect(updates).toMatchInlineSnapshot(`
-        [
-          {
-            "bucket": "non-major",
-            "isLockfileUpdate": true,
-            "isRange": true,
-            "newMajor": 1,
-            "newMinor": 3,
-            "newValue": undefined,
-            "newVersion": "1.3.0",
-            "releaseTimestamp": "2015-04-26T16:42:11.311Z",
-            "updateType": "minor",
-          },
-        ]
-      `);
+      expect(updates).toMatchObject([
+        {
+          bucket: 'non-major',
+          isLockfileUpdate: true,
+          isRange: true,
+          newMajor: 1,
+          newMinor: 3,
+          newPatch: 0,
+          newValue: undefined,
+          newVersion: '1.3.0',
+          releaseTimestamp: '2015-04-26T16:42:11.311Z',
+          updateType: 'minor',
+        },
+      ]);
       expect(updates[0].newValue).toBeUndefined();
       expect(updates[0].updateType).toBe('minor');
     });
@@ -1154,8 +1416,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '~1.3.0 || ~1.4.0',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-05-17T04:25:07.299Z',
           updateType: 'minor',
         },
@@ -1179,8 +1443,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '~1.4.0',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-05-17T04:25:07.299Z',
           updateType: 'minor',
         },
@@ -1207,8 +1473,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 3,
           newMinor: 8,
+          newPatch: 1,
           newValue: '^2.0.0 || ^3.0.0',
           newVersion: '3.8.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2017-10-17T15:22:36.646Z',
           updateType: 'major',
         },
@@ -1235,8 +1503,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 3,
           newMinor: 8,
+          newPatch: 1,
           newValue: '^3.0.0',
           newVersion: '3.8.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2017-10-17T15:22:36.646Z',
           updateType: 'major',
         },
@@ -1341,8 +1611,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '~1.4.0',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-05-17T04:25:07.299Z',
           updateType: 'minor',
         },
@@ -1373,8 +1645,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '1.4.x',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-05-17T04:25:07.299Z',
           updateType: 'minor',
         },
@@ -1398,8 +1672,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '~1.4.0',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-05-17T04:25:07.299Z',
           updateType: 'minor',
         },
@@ -1423,8 +1699,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '1.x',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-05-17T04:25:07.299Z',
           updateType: 'major',
         },
@@ -1448,8 +1726,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '1.4.x',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-05-17T04:25:07.299Z',
           updateType: 'minor',
         },
@@ -1473,8 +1753,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '1.2.x - 1.4.x',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-05-17T04:25:07.299Z',
           updateType: 'minor',
         },
@@ -1498,8 +1780,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '1',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-05-17T04:25:07.299Z',
           updateType: 'major',
         },
@@ -1523,8 +1807,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '1.4',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-05-17T04:25:07.299Z',
           updateType: 'minor',
         },
@@ -1548,8 +1834,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 0,
           newMinor: 9,
+          newPatch: 7,
           newValue: '~0.9.0',
           newVersion: '0.9.7',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2013-09-04T17:07:22.948Z',
           updateType: 'minor',
         },
@@ -1558,8 +1846,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '~1.4.0',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-05-17T04:25:07.299Z',
           updateType: 'major',
         },
@@ -1583,8 +1873,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 0,
           newMinor: 9,
+          newPatch: 7,
           newValue: '^0.9.0',
           newVersion: '0.9.7',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2013-09-04T17:07:22.948Z',
           updateType: 'minor',
         },
@@ -1593,8 +1885,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '^1.0.0',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-05-17T04:25:07.299Z',
           updateType: 'major',
         },
@@ -1618,8 +1912,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 0,
           newMinor: 9,
+          newPatch: 7,
           newValue: '^0.7.0 || ^0.8.0 || ^0.9.0',
           newVersion: '0.9.7',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'minor',
         },
@@ -1628,8 +1924,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '^0.7.0 || ^0.8.0 || ^1.0.0',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'major',
         },
@@ -1656,8 +1954,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 3,
           newMinor: 8,
+          newPatch: 1,
           newValue: '^1.0.0 || ^2.0.0 || ^3.0.0',
           newVersion: '3.8.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2017-10-17T15:22:36.646Z',
           updateType: 'major',
         },
@@ -1684,8 +1984,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 3,
           newMinor: 8,
+          newPatch: 1,
           newValue: '1.x - 3.x',
           newVersion: '3.8.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2017-10-17T15:22:36.646Z',
           updateType: 'major',
         },
@@ -1712,8 +2014,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 3,
           newMinor: 8,
+          newPatch: 1,
           newValue: '1.x || 2.x || 3.x',
           newVersion: '3.8.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2017-10-17T15:22:36.646Z',
           updateType: 'major',
         },
@@ -1740,8 +2044,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 3,
           newMinor: 8,
+          newPatch: 1,
           newValue: '1 || 2 || 3',
           newVersion: '3.8.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2017-10-17T15:22:36.646Z',
           updateType: 'major',
         },
@@ -1765,8 +2071,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '~1.2.0 || ~1.3.0 || ~1.4.0',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-05-17T04:25:07.299Z',
           updateType: 'minor',
         },
@@ -1804,8 +2112,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 0,
           newMinor: 9,
+          newPatch: 7,
           newValue: '<= 0.9.7',
           newVersion: '0.9.7',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2013-09-04T17:07:22.948Z',
           updateType: 'minor',
         },
@@ -1814,8 +2124,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '<= 1.4.1',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-05-17T04:25:07.299Z',
           updateType: 'major',
         },
@@ -1839,8 +2151,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 0,
           newMinor: 9,
+          newPatch: 7,
           newValue: '< 0.9.8',
           newVersion: '0.9.7',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2013-09-04T17:07:22.948Z',
           updateType: 'minor',
         },
@@ -1849,8 +2163,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '< 1.4.2',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-05-17T04:25:07.299Z',
           updateType: 'major',
         },
@@ -1874,8 +2190,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '< 2',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-05-17T04:25:07.299Z',
           updateType: 'major',
         },
@@ -1899,8 +2217,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '<= 1.4',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-05-17T04:25:07.299Z',
           updateType: 'minor',
         },
@@ -1924,8 +2244,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '=1.4.1',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-05-17T04:25:07.299Z',
           updateType: 'minor',
         },
@@ -1950,8 +2272,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 2,
           newMinor: 0,
+          newPatch: 3,
           newValue: '<= 2',
           newVersion: '2.0.3',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-01-31T08:11:47.852Z',
           updateType: 'major',
         },
@@ -1975,8 +2299,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '<= 1.4.1',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'minor',
         },
@@ -2000,8 +2326,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '< 2.0.0',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'major',
         },
@@ -2025,8 +2353,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '>= 0.5.0 < 2.0.0',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'major',
         },
@@ -2050,8 +2380,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 0,
           newMinor: 9,
+          newPatch: 7,
           newValue: '>= 0.5.0 <0.10',
           newVersion: '0.9.7',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'minor',
         },
@@ -2060,8 +2392,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '>= 0.5.0 <1.5',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'major',
         },
@@ -2085,8 +2419,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 0,
           newMinor: 9,
+          newPatch: 7,
           newValue: '>= 0.5.0 <= 0.9.7',
           newVersion: '0.9.7',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'minor',
         },
@@ -2095,8 +2431,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '>= 0.5.0 <= 1.4.1',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'major',
         },
@@ -2133,8 +2471,10 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'major',
           newMajor: 2,
           newMinor: 0,
+          newPatch: 3,
           newValue: '2.0.3',
           newVersion: '2.0.3',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-01-31T08:11:47.852Z',
           updateType: 'major',
         },
@@ -2178,6 +2518,7 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'major',
           newMajor: 2,
           newMinor: 0,
+          newPatch: 0,
           newValue: '2.0.0',
           newVersion: '2.0.0',
           updateType: 'major',
@@ -2207,6 +2548,7 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'non-major',
           newMajor: 20,
           newMinor: 3,
+          newPatch: 1,
           newValue: '20.3.1',
           newVersion: '20.3.1',
           updateType: 'patch',
@@ -2227,8 +2569,14 @@ describe('workers/repository/process/lookup/index', () => {
       getGithubReleases.mockResolvedValueOnce({
         releases: [
           { version: '1.4.4' },
-          { version: '1.4.5', releaseTimestamp: lastWeek.toISOString() },
-          { version: '1.4.6', releaseTimestamp: yesterday.toISOString() },
+          {
+            version: '1.4.5',
+            releaseTimestamp: lastWeek.toISOString(),
+          },
+          {
+            version: '1.4.6',
+            releaseTimestamp: yesterday.toISOString(),
+          },
         ],
       });
 
@@ -2241,9 +2589,11 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'non-major',
           newMajor: 1,
           newMinor: 4,
+          newPatch: 6,
           newValue: '1.4.6',
           newVersion: '1.4.6',
           pendingChecks: true,
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'patch',
         },
@@ -2263,8 +2613,14 @@ describe('workers/repository/process/lookup/index', () => {
       getGithubReleases.mockResolvedValueOnce({
         releases: [
           { version: '1.4.4' },
-          { version: '1.4.5', releaseTimestamp: lastWeek.toISOString() },
-          { version: '1.4.6', releaseTimestamp: yesterday.toISOString() },
+          {
+            version: '1.4.5',
+            releaseTimestamp: lastWeek.toISOString(),
+          },
+          {
+            version: '1.4.6',
+            releaseTimestamp: yesterday.toISOString(),
+          },
         ],
       });
 
@@ -2277,9 +2633,11 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'non-major',
           newMajor: 1,
           newMinor: 4,
+          newPatch: 5,
           newValue: '1.4.5',
           newVersion: '1.4.5',
           pendingVersions: ['1.4.6'],
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'patch',
         },
@@ -2306,8 +2664,10 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'non-major',
           newMajor: 2,
           newMinor: 5,
+          newPatch: 17,
           newValue: '2.5.17-beta.0',
           newVersion: '2.5.17-beta.0',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'patch',
         },
@@ -2332,8 +2692,10 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'non-major',
           newMajor: 3,
           newMinor: 1,
+          newPatch: 0,
           newValue: '3.1.0-dev.20180813',
           newVersion: '3.1.0-dev.20180813',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'patch',
         },
@@ -2358,8 +2720,10 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'non-major',
           newMajor: 3,
           newMinor: 0,
+          newPatch: 1,
           newValue: '3.0.1',
           newVersion: '3.0.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'patch',
         },
@@ -2385,8 +2749,10 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'non-major',
           newMajor: 0,
           newMinor: 0,
+          newPatch: 35,
           newValue: '0.0.35',
           newVersion: '0.0.35',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'patch',
         },
@@ -2429,8 +2795,10 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'non-major',
           newMajor: 3,
           newMinor: 0,
+          newPatch: 1,
           newValue: '3.0.1-insiders.20180726',
           newVersion: '3.0.1-insiders.20180726',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'patch',
         },
@@ -2483,8 +2851,10 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'non-major',
           newMajor: 3,
           newMinor: 0,
+          newPatch: 1,
           newValue: '3.0.1-insiders.20180726',
           newVersion: '3.0.1-insiders.20180726',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'patch',
         },
@@ -2677,8 +3047,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 0,
           newMinor: 0,
+          newPatch: 35,
           newValue: '^0.0.35',
           newVersion: '0.0.35',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2017-04-27T16:59:06.479Z',
           updateType: 'patch',
         },
@@ -2729,8 +3101,10 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'non-major',
           newMajor: 1,
           newMinor: 15,
+          newPatch: 0,
           newValue: '1.15.0',
           newVersion: '1.15.0',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'minor',
         },
@@ -2738,8 +3112,10 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'major',
           newMajor: 3,
           newMinor: 8,
+          newPatch: 1,
           newValue: '3.8.1',
           newVersion: '3.8.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'major',
         },
@@ -2765,8 +3141,10 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'non-major',
           newMajor: 1,
           newMinor: 15,
+          newPatch: 0,
           newValue: '1.15.0',
           newVersion: '1.15.0',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'minor',
         },
@@ -2774,8 +3152,10 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'v2',
           newMajor: 2,
           newMinor: 7,
+          newPatch: 0,
           newValue: '2.7.0',
           newVersion: '2.7.0',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'major',
         },
@@ -2783,8 +3163,10 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'v3',
           newMajor: 3,
           newMinor: 8,
+          newPatch: 1,
           newValue: '3.8.1',
           newVersion: '3.8.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: expect.any(String),
           updateType: 'major',
         },
@@ -2841,8 +3223,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '^1.4.1',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-05-17T04:25:07.299Z',
           updateType: 'minor',
         },
@@ -2868,8 +3252,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 0,
+          newPatch: 1,
           newValue: '~1.0.1',
           newVersion: '1.0.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2014-03-11T18:47:17.560Z',
           updateType: 'patch',
         },
@@ -2878,8 +3264,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '~1.4.1',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-05-17T04:25:07.299Z',
           updateType: 'minor',
         },
@@ -2905,8 +3293,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 0,
+          newPatch: 1,
           newValue: '~1.0.1',
           newVersion: '1.0.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2014-03-11T18:47:17.560Z',
           updateType: 'patch',
         },
@@ -2915,8 +3305,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '~1.4.1',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-05-17T04:25:07.299Z',
           updateType: 'minor',
         },
@@ -2941,8 +3333,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '>=1.4.1',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-05-17T04:25:07.299Z',
           updateType: 'minor',
         },
@@ -2968,8 +3362,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '>=1.4.1',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-05-17T04:25:07.299Z',
           updateType: 'major',
         },
@@ -3035,8 +3431,10 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'non-major',
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '1.4.1',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-05-17T04:25:07.299Z',
           updateType: 'minor',
         },
@@ -3135,8 +3533,10 @@ describe('workers/repository/process/lookup/index', () => {
           isRange: true,
           newMajor: 1,
           newMinor: 4,
+          newPatch: 1,
           newValue: '~=1.4',
           newVersion: '1.4.1',
+          newVersionAgeInDays: expect.any(Number),
           releaseTimestamp: '2015-05-17T04:25:07.299Z',
           updateType: 'major',
         },
@@ -3153,7 +3553,7 @@ describe('workers/repository/process/lookup/index', () => {
         lookup.lookupUpdates(config),
       ).unwrapOrThrow();
 
-      expect(res).toEqual({
+      expect(res).toMatchObject({
         currentVersion: '1.3.0',
         currentVersionTimestamp: '2015-04-26T16:42:11.311Z',
         fixedVersion: '1.3.0',
@@ -3165,8 +3565,10 @@ describe('workers/repository/process/lookup/index', () => {
             bucket: 'non-major',
             newMajor: 1,
             newMinor: 4,
+            newPatch: 1,
             newValue: '1.4.1',
             newVersion: '1.4.1',
+            newVersionAgeInDays: expect.any(Number),
             releaseTimestamp: expect.any(String),
             updateType: 'minor',
           },
@@ -3194,7 +3596,7 @@ describe('workers/repository/process/lookup/index', () => {
       const res = await Result.wrap(
         lookup.lookupUpdates(config),
       ).unwrapOrThrow();
-      expect(res).toEqual({
+      expect(res).toMatchObject({
         currentVersion: '1.3.0',
         currentVersionTimestamp: '2015-04-26T16:42:11.311Z',
         fixedVersion: '1.3.0',
@@ -3206,8 +3608,10 @@ describe('workers/repository/process/lookup/index', () => {
             bucket: 'non-major',
             newMajor: 1,
             newMinor: 4,
+            newPatch: 0,
             newValue: '1.4.0',
             newVersion: '1.4.0',
+            newVersionAgeInDays: expect.any(Number),
             releaseTimestamp: expect.any(String),
             updateType: 'minor',
           },
@@ -3215,8 +3619,10 @@ describe('workers/repository/process/lookup/index', () => {
             bucket: 'major',
             newMajor: 2,
             newMinor: 0,
+            newPatch: 3,
             newValue: '2.0.3',
             newVersion: '2.0.3',
+            newVersionAgeInDays: expect.any(Number),
             releaseTimestamp: expect.any(String),
             updateType: 'major',
           },
@@ -3247,7 +3653,7 @@ describe('workers/repository/process/lookup/index', () => {
         lookup.lookupUpdates(config),
       ).unwrapOrThrow();
 
-      expect(res).toEqual({
+      expect(res).toMatchObject({
         currentVersion: '1.3.0',
         currentVersionTimestamp: '2015-04-26T16:42:11.311Z',
         deprecationMessage: codeBlock`
@@ -3267,8 +3673,10 @@ describe('workers/repository/process/lookup/index', () => {
             bucket: 'non-major',
             newMajor: 1,
             newMinor: 4,
+            newPatch: 1,
             newValue: '1.4.1',
             newVersion: '1.4.1',
+            newVersionAgeInDays: expect.any(Number),
             releaseTimestamp: expect.any(String),
             updateType: 'minor',
           },
@@ -3345,6 +3753,7 @@ describe('workers/repository/process/lookup/index', () => {
             newDigest: 'sha256:abcdef1234567890',
             newMajor: 8,
             newMinor: 1,
+            newPatch: 0,
             newValue: '8.1.0',
             newVersion: '8.1.0',
             updateType: 'minor',
@@ -3395,6 +3804,7 @@ describe('workers/repository/process/lookup/index', () => {
             bucket: 'non-major',
             newMajor: 8,
             newMinor: 2,
+            newPatch: 5,
             newValue: '8.2.5',
             newVersion: '8.2.5',
             updateType: 'minor',
@@ -3440,6 +3850,7 @@ describe('workers/repository/process/lookup/index', () => {
             bucket: 'non-major',
             newMajor: 8,
             newMinor: 2,
+            newPatch: null,
             newValue: '8.2',
             newVersion: '8.2',
             updateType: 'minor',
@@ -3448,6 +3859,7 @@ describe('workers/repository/process/lookup/index', () => {
             bucket: 'major',
             newMajor: 9,
             newMinor: 0,
+            newPatch: null,
             newValue: '9.0',
             newVersion: '9.0',
             registryUrl: 'https://other.registry',
@@ -3493,6 +3905,7 @@ describe('workers/repository/process/lookup/index', () => {
             bucket: 'major',
             newMajor: 9,
             newMinor: null,
+            newPatch: null,
             newValue: '9',
             newVersion: '9',
             updateType: 'major',
@@ -3558,6 +3971,7 @@ describe('workers/repository/process/lookup/index', () => {
             newDigest: 'bbb222',
             newMajor: 18,
             newMinor: 19,
+            newPatch: 0,
             newValue: '18.19.0-alpine',
             newVersion: '18.19.0',
             updateType: 'minor',
@@ -3589,6 +4003,9 @@ describe('workers/repository/process/lookup/index', () => {
           { version: '12.6.2.jre11' },
         ],
       });
+      postprocessMavenRelease.mockImplementationOnce((_, x) =>
+        Promise.resolve(x),
+      );
 
       const res = await Result.wrap(
         lookup.lookupUpdates(config),
@@ -3665,6 +4082,7 @@ describe('workers/repository/process/lookup/index', () => {
             bucket: 'major',
             newMajor: 12,
             newMinor: null,
+            newPatch: null,
             newValue: 'bookworm-slim',
             newVersion: 'bookworm',
             updateType: 'major',
@@ -3843,6 +4261,7 @@ describe('workers/repository/process/lookup/index', () => {
             newDigest: 'sha256:abcdef1234567890',
             newMajor: 8,
             newMinor: 1,
+            newPatch: 0,
             newValue: '8.1.0',
             newVersion: '8.1.0',
             updateType: 'minor',
@@ -3952,7 +4371,7 @@ describe('workers/repository/process/lookup/index', () => {
       config.datasource = NpmDatasource.id;
       config.packageRules = [
         {
-          matchSourceUrlPrefixes: ['https://github.com/kriskowal/q'],
+          matchSourceUrls: ['https://github.com/kriskowal/**'],
           allowedVersions: '< 1.4.0',
         },
       ];
@@ -3973,8 +4392,10 @@ describe('workers/repository/process/lookup/index', () => {
             bucket: 'major',
             newMajor: 1,
             newMinor: 3,
+            newPatch: 0,
             newValue: '1.3.0',
             newVersion: '1.3.0',
+            newVersionAgeInDays: expect.any(Number),
             releaseTimestamp: expect.any(String),
             updateType: 'major',
           },
@@ -4023,6 +4444,7 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'major',
           newMajor: 18,
           newMinor: 0,
+          newPatch: 0,
           newValue: '18.0.0',
           newVersion: '18.0.0',
           updateType: 'major',
@@ -4067,6 +4489,7 @@ describe('workers/repository/process/lookup/index', () => {
 
       expect(res).toEqual({
         currentVersion: '17.0.0',
+        currentVersionAgeInDays: 1,
         currentVersionTimestamp: releaseTimestamp,
         fixedVersion: '17.0.0',
         isSingleVersion: true,
@@ -4076,6 +4499,7 @@ describe('workers/repository/process/lookup/index', () => {
             bucket: 'major',
             newMajor: 19,
             newMinor: 0,
+            newPatch: 0,
             newValue: '19.0.0',
             newVersion: '19.0.0',
             updateType: 'major',
@@ -4126,6 +4550,7 @@ describe('workers/repository/process/lookup/index', () => {
             bucket: 'major',
             newMajor: 19,
             newMinor: 0,
+            newPatch: 0,
             newValue: '19.0.0',
             newVersion: '19.0.0',
             updateType: 'major',
@@ -4164,6 +4589,7 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'major',
           newMajor: 18,
           newMinor: 0,
+          newPatch: 0,
           newValue: '18.0.0',
           newVersion: '18.0.0',
           updateType: 'major',
@@ -4209,6 +4635,7 @@ describe('workers/repository/process/lookup/index', () => {
           newDigest: 'sha256:abcdef1234567890',
           newMajor: 18,
           newMinor: 0,
+          newPatch: 0,
           newValue: '18.0.0',
           newVersion: '18.0.0',
           updateType: 'major',
@@ -4250,6 +4677,96 @@ describe('workers/repository/process/lookup/index', () => {
           newValue: undefined,
         },
       ]);
+    });
+
+    it('handles replacements - Digest configured and validating getDigest funtion call', async () => {
+      config.packageName = 'openjdk';
+      config.currentDigest = 'sha256:fedcba0987654321';
+      config.currentValue = '17.0.0';
+      //config.pinDigests = true;
+      config.datasource = DockerDatasource.id;
+      config.versioning = dockerVersioningId;
+      // This config is normally set when packageRules are applied
+      config.replacementName = 'eclipse-temurin';
+      config.replacementVersion = '19.0.0';
+      getDockerReleases.mockResolvedValueOnce({
+        releases: [
+          {
+            version: '17.0.0',
+          },
+          {
+            version: '17.0.1',
+          },
+        ],
+        lookupName: 'openjdk',
+      });
+      getDockerDigest.mockResolvedValueOnce('sha256:abcdef1234567890');
+      getDockerDigest.mockResolvedValueOnce('sha256:fedcba0987654321');
+      getDockerDigest.mockResolvedValueOnce('sha256:pin0987654321');
+
+      const { updates } = await Result.wrap(
+        lookup.lookupUpdates(config),
+      ).unwrapOrThrow();
+
+      expect(updates).toEqual([
+        {
+          bucket: 'non-major',
+          newDigest: 'sha256:abcdef1234567890',
+          newMajor: 17,
+          newMinor: 0,
+          newPatch: 1,
+          newValue: '17.0.1',
+          newVersion: '17.0.1',
+          updateType: 'patch',
+        },
+        {
+          newDigest: 'sha256:fedcba0987654321',
+          newName: 'eclipse-temurin',
+          newValue: '19.0.0',
+          newVersion: undefined,
+          updateType: 'replacement',
+        },
+        {
+          newDigest: 'sha256:pin0987654321',
+          newValue: '17.0.0',
+          newVersion: undefined,
+          updateType: 'digest',
+        },
+      ]);
+
+      expect(getDockerDigest).toHaveBeenNthCalledWith(
+        1,
+        {
+          currentDigest: 'sha256:fedcba0987654321',
+          currentValue: '17.0.0',
+          lookupName: 'openjdk',
+          packageName: 'openjdk',
+          registryUrl: 'https://index.docker.io',
+        },
+        '17.0.1',
+      );
+      expect(getDockerDigest).toHaveBeenNthCalledWith(
+        2,
+        {
+          currentDigest: undefined,
+          currentValue: '17.0.0',
+          lookupName: undefined,
+          packageName: 'eclipse-temurin',
+          registryUrl: 'https://index.docker.io',
+        },
+        '19.0.0',
+      );
+      expect(getDockerDigest).toHaveBeenNthCalledWith(
+        3,
+        {
+          currentDigest: 'sha256:fedcba0987654321',
+          currentValue: '17.0.0',
+          lookupName: 'openjdk',
+          packageName: 'openjdk',
+          registryUrl: 'https://index.docker.io',
+        },
+        '17.0.0',
+      );
     });
 
     it('handles replacements - skips if package and replacement names match', async () => {
@@ -4312,6 +4829,7 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'major',
           newMajor: 18,
           newMinor: 0,
+          newPatch: 0,
           newValue: '18.0.0',
           newVersion: '18.0.0',
           updateType: 'major',
@@ -4350,6 +4868,7 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'major',
           newMajor: 18,
           newMinor: 0,
+          newPatch: 0,
           newValue: '18.0.0',
           newVersion: '18.0.0',
           updateType: 'major',
@@ -4388,6 +4907,7 @@ describe('workers/repository/process/lookup/index', () => {
           bucket: 'major',
           newMajor: 18,
           newMinor: 0,
+          newPatch: 0,
           newValue: '18.0.0',
           newVersion: '18.0.0',
           updateType: 'major',
@@ -4455,6 +4975,10 @@ describe('workers/repository/process/lookup/index', () => {
 
     describe('handles merge confidence', () => {
       const defaultApiBaseUrl = 'https://developer.mend.io/';
+      const mcConfig: AllConfig = {
+        mergeConfidenceEndpoint: defaultApiBaseUrl,
+        mergeConfidenceDatasources: presetSupportedDatasources,
+      };
       const getMergeConfidenceSpy = jest.spyOn(
         McApi,
         'getMergeConfidenceLevel',
@@ -4466,7 +4990,7 @@ describe('workers/repository/process/lookup/index', () => {
 
       beforeEach(() => {
         hostRules.add(hostRule);
-        initConfig();
+        initConfig(mcConfig);
         memCache.reset();
       });
 
@@ -4505,8 +5029,10 @@ describe('workers/repository/process/lookup/index', () => {
             mergeConfidenceLevel: 'high',
             newMajor: 3,
             newMinor: 8,
+            newPatch: 1,
             newValue: '3.8.1',
             newVersion: '3.8.1',
+            newVersionAgeInDays: expect.any(Number),
             releaseTimestamp: '2017-10-17T15:22:36.646Z',
             updateType: 'minor',
           },
@@ -4532,8 +5058,10 @@ describe('workers/repository/process/lookup/index', () => {
             bucket: 'non-major',
             newMajor: 3,
             newMinor: 8,
+            newPatch: 1,
             newValue: '3.8.1',
             newVersion: '3.8.1',
+            newVersionAgeInDays: expect.any(Number),
             releaseTimestamp: '2017-10-17T15:22:36.646Z',
             updateType: 'minor',
           },
@@ -4547,7 +5075,7 @@ describe('workers/repository/process/lookup/index', () => {
         config.packageName = 'webpack';
         config.datasource = datasource;
         hostRules.clear(); // reset merge confidence
-        initConfig();
+        initConfig(mcConfig);
         httpMock
           .scope('https://registry.npmjs.org')
           .get('/webpack')
@@ -4559,6 +5087,45 @@ describe('workers/repository/process/lookup/index', () => {
 
         expect(updates).toBeEmptyArray();
       });
+    });
+
+    it('detects gomod updates and uses updateType=digest when appropriate', async () => {
+      config.manager = 'gomod';
+      config.datasource = GoDatasource.id;
+      config.currentValue = 'v0.0.0-20240506185236-b8a5c65736ae';
+      config.currentDigest = 'b8a5c65736ae';
+      config.packageName = 'google.golang.org/genproto/googleapis/rpc';
+      config.digestOneAndOnly = true;
+
+      httpMock
+        .scope(
+          'https://proxy.golang.org/google.golang.org/genproto/googleapis/rpc',
+        )
+        .get('/@v/list')
+        .reply(200, '')
+        .get('/v2/@v/list')
+        .reply(404)
+        .get('/@latest')
+        .reply(200, { Version: 'v0.0.0-20240509183442-62759503f434' });
+
+      const { updates } = await Result.wrap(
+        lookup.lookupUpdates(config),
+      ).unwrapOrThrow();
+
+      expect(updates).toEqual([
+        {
+          bucket: 'non-major',
+          newDigest: '62759503f434',
+          newMajor: 0,
+          newMinor: 0,
+          newPatch: 0,
+          newValue: 'v0.0.0-20240509183442-62759503f434',
+          newVersion: 'v0.0.0-20240509183442-62759503f434',
+          newVersionAgeInDays: expect.any(Number),
+          releaseTimestamp: '2024-05-09T18:34:42.000Z',
+          updateType: 'digest',
+        },
+      ]);
     });
   });
 });

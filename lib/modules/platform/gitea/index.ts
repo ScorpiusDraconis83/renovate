@@ -70,6 +70,7 @@ interface GiteaRepoConfig {
   labelList: Promise<Label[]> | null;
   defaultBranch: string;
   cloneSubmodules: boolean;
+  cloneSubmodulesFilter: string[] | undefined;
   hasIssuesEnabled: boolean;
 }
 
@@ -255,6 +256,7 @@ const platform: Platform = {
   async initRepo({
     repository,
     cloneSubmodules,
+    cloneSubmodulesFilter,
     gitUrl,
   }: RepoParams): Promise<RepoResult> {
     let repo: Repo;
@@ -262,6 +264,7 @@ const platform: Platform = {
     config = {} as any;
     config.repository = repository;
     config.cloneSubmodules = !!cloneSubmodules;
+    config.cloneSubmodulesFilter = cloneSubmodulesFilter;
 
     // Try to fetch information about repository
     try {
@@ -483,7 +486,7 @@ const platform: Platform = {
 
       // Add pull request to cache for further lookups / queries
       if (pr) {
-        await GiteaPrCache.addPr(giteaHttp, config.repository, botUserName, pr);
+        await GiteaPrCache.setPr(giteaHttp, config.repository, botUserName, pr);
       }
     }
 
@@ -523,7 +526,7 @@ const platform: Platform = {
     prTitle,
     prBody: rawBody,
     labels: labelNames,
-    platformOptions,
+    platformPrOptions,
     draftPR,
   }: CreatePRConfig): Promise<Pr> {
     let title = prTitle;
@@ -547,12 +550,12 @@ const platform: Platform = {
         labels: labels.filter(is.number),
       });
 
-      if (platformOptions?.usePlatformAutomerge) {
+      if (platformPrOptions?.usePlatformAutomerge) {
         if (semver.gte(defaults.version, '1.17.0')) {
           try {
             await helper.mergePR(config.repository, gpr.number, {
               Do:
-                getMergeMethod(platformOptions?.automergeStrategy) ??
+                getMergeMethod(platformPrOptions?.automergeStrategy) ??
                 config.mergeMethod,
               merge_when_checks_succeed: true,
             });
@@ -580,7 +583,7 @@ const platform: Platform = {
         throw new Error('Can not parse newly created Pull Request');
       }
 
-      await GiteaPrCache.addPr(giteaHttp, config.repository, botUserName, pr);
+      await GiteaPrCache.setPr(giteaHttp, config.repository, botUserName, pr);
       return pr;
     } catch (err) {
       // When the user manually deletes a branch from Renovate, the PR remains but is no longer linked to any branch. In
@@ -589,7 +592,8 @@ const platform: Platform = {
       // would cause a HTTP 409 conflict error, which we hereby gracefully handle.
       if (err.statusCode === 409) {
         logger.warn(
-          `Attempting to gracefully recover from 409 Conflict response in createPr(${title}, ${sourceBranch})`,
+          { prTitle: title, sourceBranch },
+          'Attempting to gracefully recover from 409 Conflict response in createPr()',
         );
 
         // Refresh cached PR list and search for pull request with matching information
@@ -673,7 +677,7 @@ const platform: Platform = {
     );
     const pr = toRenovatePR(gpr, botUserName);
     if (pr) {
-      await GiteaPrCache.addPr(giteaHttp, config.repository, botUserName, pr);
+      await GiteaPrCache.setPr(giteaHttp, config.repository, botUserName, pr);
     }
   },
 
@@ -867,9 +871,6 @@ const platform: Platform = {
   async ensureIssueClosing(title: string): Promise<void> {
     logger.debug(`ensureIssueClosing(${title})`);
     if (config.hasIssuesEnabled === false) {
-      logger.info(
-        'Cannot ensure issue because issues are disabled in this repository',
-      );
       return;
     }
     const issueList = await platform.getIssueList();
@@ -1001,9 +1002,15 @@ const platform: Platform = {
   },
 
   massageMarkdown(prBody: string): string {
-    return smartTruncate(smartLinks(prBody), 1000000);
+    return smartTruncate(smartLinks(prBody), maxBodyLength());
   },
+
+  maxBodyLength,
 };
+
+export function maxBodyLength(): number {
+  return 1000000;
+}
 
 /* eslint-disable @typescript-eslint/unbound-method */
 export const {

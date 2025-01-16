@@ -1,5 +1,6 @@
 import upath from 'upath';
-import { XmlDocument, XmlElement } from 'xmldoc';
+import type { XmlElement } from 'xmldoc';
+import { XmlDocument } from 'xmldoc';
 import { logger } from '../../../logger';
 import { findUpLocal, readLocalFile } from '../../../util/fs';
 import { minimatch } from '../../../util/minimatch';
@@ -51,13 +52,19 @@ export async function getConfiguredRegistries(
   }
 
   const packageSources = nuGetConfig.childNamed('packageSources');
+
   if (!packageSources) {
+    // If there are no packageSources, don't even look for any
+    // disabledPackageSources
+    // Even if NuGet default source (nuget.org) was among the
+    // disabledPackageSources, Renovate will default to the default source
+    // (nuget.org) anyway
     return undefined;
   }
 
   const packageSourceMapping = nuGetConfig.childNamed('packageSourceMapping');
 
-  const registries = getDefaultRegistries();
+  let registries = getDefaultRegistries();
 
   // Map optional source mapped package patterns to default registries
   for (const registry of registries) {
@@ -110,6 +117,25 @@ export async function getConfiguredRegistries(
       // child.name === 'remove' not supported
     }
   }
+
+  const disabledPackageSources = nuGetConfig.childNamed(
+    'disabledPackageSources',
+  );
+
+  if (disabledPackageSources) {
+    for (const child of disabledPackageSources.children) {
+      if (
+        child.type === 'element' &&
+        child.name === 'add' &&
+        child.attr.value === 'true'
+      ) {
+        const disabledRegistryKey = child.attr.key;
+        registries = registries.filter((o) => o.name !== disabledRegistryKey);
+        logger.debug(`Disabled registry with key: ${disabledRegistryKey}`);
+      }
+    }
+  }
+
   return registries;
 }
 

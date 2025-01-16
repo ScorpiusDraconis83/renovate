@@ -1,9 +1,9 @@
-import type { LogLevel } from 'bunyan';
 import type { PlatformId } from '../constants';
 import type { LogLevelRemap } from '../logger/types';
 import type { CustomManager } from '../modules/manager/custom/types';
 import type { RepoSortMethod, SortMethod } from '../modules/platform/types';
 import type { HostRule, SkipReason } from '../types';
+import type { StageName } from '../types/skip-reason';
 import type { GitNoVerifyOption } from '../util/git/types';
 import type { MergeConfidence } from '../util/merge-confidence/types';
 
@@ -27,6 +27,7 @@ export interface GroupConfig extends Record<string, unknown> {
 }
 
 export type RecreateWhen = 'auto' | 'never' | 'always';
+export type PlatformCommitOptions = 'auto' | 'disabled' | 'enabled';
 // TODO: Proper typings
 export interface RenovateSharedConfig {
   $schema?: string;
@@ -46,7 +47,7 @@ export interface RenovateSharedConfig {
   commitMessagePrefix?: string;
   commitMessageTopic?: string;
   confidential?: boolean;
-  customChangelogUrl?: string;
+  changelogUrl?: string;
   dependencyDashboardApproval?: boolean;
   draftPR?: boolean;
   enabled?: boolean;
@@ -70,7 +71,7 @@ export interface RenovateSharedConfig {
   milestone?: number;
   npmrc?: string;
   npmrcMerge?: boolean;
-  platformCommit?: boolean;
+  platformCommit?: PlatformCommitOptions;
   postUpgradeTasks?: PostUpgradeTasks;
   prBodyColumns?: string[];
   prBodyDefinitions?: Record<string, string>;
@@ -114,8 +115,8 @@ export interface GlobalOnlyConfig {
   gitNoVerify?: GitNoVerifyOption[];
   gitPrivateKey?: string;
   globalExtends?: string[];
-  logFile?: string;
-  logFileLevel?: LogLevel;
+  mergeConfidenceDatasources?: string[];
+  mergeConfidenceEndpoint?: string;
   platform?: PlatformId;
   prCommitsPerRunLimit?: number;
   privateKeyPath?: string;
@@ -124,6 +125,7 @@ export interface GlobalOnlyConfig {
   redisUrl?: string;
   repositories?: RenovateRepository[];
   useCloudMetadataServices?: boolean;
+  deleteConfigFile?: boolean;
 }
 
 // Config options used within the repository worker, but not user configurable
@@ -147,6 +149,7 @@ export interface RepoGlobalConfig {
   dockerSidecarImage?: string;
   dockerUser?: string;
   dryRun?: DryRunConfig;
+  encryptedWarning?: string;
   endpoint?: string;
   executionTimeout?: number;
   exposeAllEnv?: boolean;
@@ -163,6 +166,10 @@ export interface RepoGlobalConfig {
   autodiscoverRepoSort?: RepoSortMethod;
   autodiscoverRepoOrder?: SortMethod;
   userAgent?: string;
+  dockerMaxPages?: number;
+  s3Endpoint?: string;
+  s3PathStyle?: boolean;
+  cachePrivatePackages?: boolean;
 }
 
 export interface LegacyAdminConfig {
@@ -173,7 +180,7 @@ export interface LegacyAdminConfig {
   onboarding?: boolean;
   onboardingBranch?: string;
   onboardingCommitMessage?: string;
-  onboardingNoDeps?: boolean;
+  onboardingNoDeps?: 'auto' | 'enabled' | 'disabled';
   onboardingRebaseCheckbox?: boolean;
   onboardingPrTitle?: string;
   onboardingConfig?: RenovateSharedConfig;
@@ -221,6 +228,8 @@ export interface RenovateConfig
     AssigneesAndReviewersConfig,
     ConfigMigration,
     Record<string, unknown> {
+  s3Endpoint?: string;
+  s3PathStyle?: boolean;
   reportPath?: string;
   reportType?: 'logging' | 'file' | 's3' | null;
   depName?: string;
@@ -230,6 +239,7 @@ export interface RenovateConfig
   baseBranch?: string;
   defaultBranch?: string;
   branchList?: string[];
+  cloneSubmodulesFilter?: string[];
   description?: string | string[];
   force?: RenovateConfig;
   errors?: ValidationMessage[];
@@ -296,6 +306,9 @@ export interface RenovateConfig
   statusCheckNames?: Record<StatusCheckKey, string | null>;
   env?: UserEnv;
   logLevelRemap?: LogLevelRemap[];
+
+  branchTopic?: string;
+  additionalBranchPrefix?: string;
 }
 
 const CustomDatasourceFormats = ['json', 'plain', 'yaml', 'html'] as const;
@@ -355,13 +368,6 @@ export interface PackageRule
     UpdateConfig,
     Record<string, unknown> {
   description?: string | string[];
-  excludeDepNames?: string[];
-  excludeDepPatterns?: string[];
-  excludeDepPrefixes?: string[];
-  excludePackageNames?: string[];
-  excludePackagePatterns?: string[];
-  excludePackagePrefixes?: string[];
-  excludeRepositories?: string[];
   isVulnerabilityAlert?: boolean;
   matchBaseBranches?: string[];
   matchCategories?: string[];
@@ -371,21 +377,18 @@ export interface PackageRule
   matchCurrentVersion?: string;
   matchDatasources?: string[];
   matchDepNames?: string[];
-  matchDepPatterns?: string[];
-  matchDepPrefixes?: string[];
   matchDepTypes?: string[];
   matchFileNames?: string[];
   matchManagers?: string[];
   matchNewValue?: string;
   matchPackageNames?: string[];
-  matchPackagePatterns?: string[];
-  matchPackagePrefixes?: string[];
   matchRepositories?: string[];
-  matchSourceUrlPrefixes?: string[];
   matchSourceUrls?: string[];
   matchUpdateTypes?: UpdateType[];
+  matchJsonata?: string[];
   registryUrls?: string[] | null;
   vulnerabilitySeverity?: string;
+  vulnerabilityFixVersion?: string;
 }
 
 export interface ValidationMessage {
@@ -394,12 +397,13 @@ export interface ValidationMessage {
 }
 
 export type AllowedParents =
-  | 'customManagers'
   | 'customDatasources'
+  | 'customManagers'
   | 'hostRules'
-  | 'postUpgradeTasks'
+  | 'logLevelRemap'
   | 'packageRules'
-  | 'logLevelRemap';
+  | 'postUpgradeTasks'
+  | 'vulnerabilityAlerts';
 export interface RenovateOptionBase {
   /**
    * If true, the option can only be configured by people with access to the Renovate instance.
@@ -451,6 +455,11 @@ export interface RenovateOptionBase {
    * For internal use only: add it to any config option that supports regex or glob matching
    */
   patternMatch?: boolean;
+
+  /**
+   * For internal use only: add it to any config option of type integer that supports negative integers
+   */
+  allowNegative?: boolean;
 }
 
 export interface RenovateArrayOption<
@@ -543,9 +552,11 @@ export interface PackageRuleInputConfig extends Record<string, unknown> {
   packageRules?: (PackageRule & PackageRuleInputConfig)[];
   releaseTimestamp?: string | null;
   repository?: string;
+  currentVersionAgeInDays?: number;
   currentVersionTimestamp?: string;
   enabled?: boolean;
   skipReason?: SkipReason;
+  skipStage?: StageName;
 }
 
 export interface ConfigMigration {

@@ -21,6 +21,10 @@ export class ArtifactoryDatasource extends Datasource {
 
   override readonly registryStrategy = 'merge';
 
+  override readonly releaseTimestampSupport = true;
+  override readonly releaseTimestampNote =
+    'The release timestamp is determined from the date-like text, next to the version hyperlink tag in the results.';
+
   @cache({
     namespace: `datasource-${datasource}`,
     key: ({ registryUrl, packageName }: GetReleasesConfig) =>
@@ -110,6 +114,9 @@ export class ArtifactoryDatasource extends Datasource {
   }
 
   private static parseReleaseTimestamp(rawText: string): string {
-    return rawText.trim().replace(regEx(/ ?-$/), '') + 'Z';
+    return (
+      rawText.split(regEx(/\s{2,}/)).filter((e) => !isNaN(Date.parse(e)))[0] +
+      'Z'
+    );
   }
 }

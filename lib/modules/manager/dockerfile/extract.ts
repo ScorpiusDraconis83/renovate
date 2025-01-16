@@ -244,6 +244,7 @@ export function extractPackageFile(
   _packageFile: string,
   config: ExtractConfig,
 ): PackageFileContent | null {
+  const sanitizedContent = content.replace(regEx(/^\uFEFF/), ''); // remove bom marker
   const deps: PackageDependency[] = [];
   const stageNames: string[] = [];
   const args: Record<string, string> = {};
@@ -253,8 +254,8 @@ export function extractPackageFile(
   let lookForEscapeChar = true;
   let lookForSyntaxDirective = true;
 
-  const lineFeed = content.indexOf('\r\n') >= 0 ? '\r\n' : '\n';
-  const lines = content.split(newlineRegex);
+  const lineFeed = sanitizedContent.indexOf('\r\n') >= 0 ? '\r\n' : '\n';
+  const lines = sanitizedContent.split(newlineRegex);
   for (let lineNumber = 0; lineNumber < lines.length; ) {
     const lineNumberInstrStart = lineNumber;
     let instruction = lines[lineNumber];
@@ -384,7 +385,7 @@ export function extractPackageFile(
     const copyFromRegex = new RegExp(
       '^[ \\t]*COPY(?:' +
         escapeChar +
-        '[ \\t]*\\r?\\n| |\\t|#.*?\\r?\\n|--[a-z]+=[a-zA-Z0-9_.:-]+?)+--from=(?<image>\\S+)',
+        '[ \\t]*\\r?\\n| |\\t|#.*?\\r?\\n|--[a-z]+(?:=[a-zA-Z0-9_.:-]+?)?)+--from=(?<image>\\S+)',
       'im',
     ); // TODO #12875 complex for re2 has too many not supported groups
     const copyFromMatch = instruction.match(copyFromRegex);
@@ -418,6 +419,41 @@ export function extractPackageFile(
           { image: copyFromMatch.groups.image },
           'Skipping index reference COPY --from',
         );
+      }
+    }
+
+    const runMountFromRegex = regEx(
+      '^[ \\t]*RUN(?:' +
+        escapeChar +
+        '[ \\t]*\\r?\\n| |\\t|#.*?\\r?\\n|--[a-z]+(?:=[a-zA-Z0-9_.:-]+?)?)+--mount=(?:\\S*=\\S*,)*from=(?<image>[^, ]+)',
+      'im',
+    );
+    const runMountFromMatch = instruction.match(runMountFromRegex);
+    if (runMountFromMatch?.groups?.image) {
+      if (stageNames.includes(runMountFromMatch.groups.image)) {
+        logger.debug(
+          { image: runMountFromMatch.groups.image },
+          'Skipping alias RUN --mount=from',
+        );
+      } else {
+        const dep = getDep(
+          runMountFromMatch.groups.image,
+          true,
+          config.registryAliases,
+        );
+        const lineNumberRanges: number[][] = [
+          [lineNumberInstrStart, lineNumber],
+        ];
+        processDepForAutoReplace(dep, lineNumberRanges, lines, lineFeed);
+        logger.debug(
+          {
+            depName: dep.depName,
+            currentValue: dep.currentValue,
+            currentDigest: dep.currentDigest,
+          },
+          'Dockerfile RUN --mount=from',
+        );
+        deps.push(dep);
       }
     }
 

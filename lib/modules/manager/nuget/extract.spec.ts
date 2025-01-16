@@ -57,7 +57,85 @@ describe('modules/manager/nuget/extract', () => {
       const sample = Fixtures.get(packageFile);
       const res = await extractPackageFile(sample, packageFile, config);
       expect(res?.deps).toMatchSnapshot();
-      expect(res?.deps).toHaveLength(17);
+      expect(res?.deps).toHaveLength(23);
+    });
+
+    it('extracts msbuild sdk from the Sdk attr of Project element', async () => {
+      const packageFile = 'sample.csproj';
+      const sample = `
+      <Project Sdk="Microsoft.Build.NoTargets/3.4.0">
+        <PropertyGroup>
+          <TargetFramework>net7.0</TargetFramework> <!-- this is a dummy value -->
+          <NuspecFile>$(MSBuildThisFileDirectory)\tdlib.native.nuspec</NuspecFile>
+          <NuspecProperties>version=$(PackageVersion)</NuspecProperties>
+        </PropertyGroup>
+      </Project>
+      `;
+      const res = await extractPackageFile(sample, packageFile, config);
+      expect(res?.deps).toEqual([
+        {
+          depName: 'Microsoft.Build.NoTargets',
+          depType: 'msbuild-sdk',
+          currentValue: '3.4.0',
+          datasource: 'nuget',
+        },
+      ]);
+      expect(res?.deps).toHaveLength(1);
+    });
+
+    it('does not extract msbuild sdk from the Sdk attr of Project element if version is missing', async () => {
+      const packageFile = 'sample.csproj';
+      const sample = `
+      <Project Sdk="Microsoft.Build.NoTargets">
+        <PropertyGroup>
+          <TargetFramework>net7.0</TargetFramework> <!-- this is a dummy value -->
+          <NuspecFile>$(MSBuildThisFileDirectory)\tdlib.native.nuspec</NuspecFile>
+          <NuspecProperties>version=$(PackageVersion)</NuspecProperties>
+        </PropertyGroup>
+      </Project>
+      `;
+      const res = await extractPackageFile(sample, packageFile, config);
+      expect(res).toBeNull();
+    });
+
+    it('extracts msbuild sdk from the Sdk element', async () => {
+      const packageFile = 'sample.csproj';
+      const sample = `
+      <Project>
+        <Sdk Name="Microsoft.Build.NoTargets" Version="3.4.0" />
+        <PropertyGroup>
+          <TargetFramework>net7.0</TargetFramework> <!-- this is a dummy value -->
+          <NuspecFile>$(MSBuildThisFileDirectory)\tdlib.native.nuspec</NuspecFile>
+          <NuspecProperties>version=$(PackageVersion)</NuspecProperties>
+        </PropertyGroup>
+      </Project>
+      `;
+      const res = await extractPackageFile(sample, packageFile, config);
+      expect(res?.deps).toEqual([
+        {
+          depName: 'Microsoft.Build.NoTargets',
+          depType: 'msbuild-sdk',
+          currentValue: '3.4.0',
+          datasource: 'nuget',
+        },
+      ]);
+      expect(res?.deps).toHaveLength(1);
+    });
+
+    it('does not extract msbuild sdk from the Sdk element if version is missing', async () => {
+      const packageFile = 'sample.csproj';
+      const sample = `
+      <Project>
+        <Sdk Name="Microsoft.Build.NoTargets" />
+        <PropertyGroup>
+          <TargetFramework>net7.0</TargetFramework> <!-- this is a dummy value -->
+          <NuspecFile>$(MSBuildThisFileDirectory)\tdlib.native.nuspec</NuspecFile>
+          <NuspecProperties>version=$(PackageVersion)</NuspecProperties>
+        </PropertyGroup>
+      </Project>
+      `;
+      const res = await extractPackageFile(sample, packageFile, config);
+      expect(res).toBeNull();
     });
 
     it('extracts dependency with lower-case Version attribute', async () => {
@@ -79,7 +157,7 @@ describe('modules/manager/nuget/extract', () => {
       const sample = Fixtures.get(packageFile);
       const res = await extractPackageFile(sample, packageFile, config);
       expect(res?.deps).toMatchSnapshot();
-      expect(res?.deps).toHaveLength(17);
+      expect(res?.deps).toHaveLength(22);
     });
 
     it('extracts ContainerBaseImage', async () => {

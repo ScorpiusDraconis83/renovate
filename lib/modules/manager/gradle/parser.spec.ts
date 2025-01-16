@@ -2,7 +2,12 @@ import is from '@sindresorhus/is';
 import { codeBlock } from 'common-tags';
 import { Fixtures } from '../../../../test/fixtures';
 import { fs, logger } from '../../../../test/util';
-import { parseGradle, parseKotlinSource, parseProps } from './parser';
+import {
+  parseGradle,
+  parseJavaToolchainVersion,
+  parseKotlinSource,
+  parseProps,
+} from './parser';
 import { GRADLE_PLUGINS, REGISTRY_URLS } from './parser/common';
 
 jest.mock('../../../util/fs');
@@ -754,15 +759,27 @@ describe('modules/manager/gradle/parser', () => {
 
   describe('heuristic dependency matching', () => {
     it.each`
-      input                                  | output
-      ${'("foo", "bar", "1.2.3")'}           | ${{ depName: 'foo:bar', currentValue: '1.2.3' }}
-      ${'("foo", "bar", "1.2.3", "4.5.6")'}  | ${null}
-      ${'(["foo", "bar", "1.2.3"])'}         | ${null}
-      ${'someMethod("foo", "bar", "1.2.3")'} | ${{ depName: 'foo:bar', currentValue: '1.2.3' }}
-      ${'listOf("foo", "bar", "baz")'}       | ${null}
+      input                                                                    | output
+      ${'("foo", "bar", "1.2.3")'}                                             | ${{ depName: 'foo:bar', currentValue: '1.2.3' }}
+      ${'("foo", "bar", "1.2.3", "4.5.6")'}                                    | ${null}
+      ${'(["foo", "bar", "1.2.3"])'}                                           | ${null}
+      ${'someMethod("foo", "bar", "1.2.3")'}                                   | ${{ depName: 'foo:bar', currentValue: '1.2.3' }}
+      ${'listOf("foo", "bar", "baz")'}                                         | ${null}
+      ${'java { registerFeature(foo) { capability("foo", "bar", "1.2.3") } }'} | ${null}
     `('$input', ({ input, output }) => {
       const { deps } = parseGradle(input);
       expect(deps).toMatchObject([output].filter(is.truthy));
+    });
+
+    it('handles 3 independent dependencies mismatched as groupId, artifactId, version', () => {
+      const { deps } = parseGradle(
+        'someConfig("foo:bar:1.2.3", "foo:baz:4.5.6", "foo:qux:7.8.9")',
+      );
+      expect(deps).toMatchObject([
+        { depName: 'foo:bar', currentValue: '1.2.3' },
+        { depName: 'foo:baz', currentValue: '4.5.6' },
+        { depName: 'foo:qux', currentValue: '7.8.9' },
+      ]);
     });
   });
 
@@ -786,7 +803,106 @@ describe('modules/manager/gradle/parser', () => {
         content.slice(managerData!.fileReplacePosition).indexOf(currentValue!),
       );
       expect(replacementIndices.every((idx) => idx === 0)).toBeTrue();
-      expect(deps).toMatchSnapshot();
+      expect(deps).toMatchObject([
+        {
+          currentValue: '1.5.2.RELEASE',
+          depName: 'org.springframework.boot:spring-boot-gradle-plugin',
+          groupName: 'springBootVersion',
+          managerData: {
+            fileReplacePosition: 53,
+            packageFile: 'build.gradle',
+          },
+        },
+        {
+          currentValue: '1.2.3',
+          depName: 'com.github.jengelman.gradle.plugins:shadow',
+          managerData: {
+            fileReplacePosition: 417,
+            packageFile: 'build.gradle',
+          },
+        },
+        {
+          currentValue: '0.1',
+          depName: 'com.fkorotkov:gradle-libraries-plugin',
+          managerData: {
+            fileReplacePosition: 481,
+            packageFile: 'build.gradle',
+          },
+        },
+        {
+          currentValue: '0.2.3',
+          depName:
+            'gradle.plugin.se.patrikerdes:gradle-use-latest-versions-plugin',
+          managerData: {
+            fileReplacePosition: 568,
+            packageFile: 'build.gradle',
+          },
+        },
+        {
+          currentValue: '3.1.1',
+          depName: 'org.apache.openjpa:openjpa',
+          managerData: {
+            fileReplacePosition: 621,
+            packageFile: 'build.gradle',
+          },
+        },
+        {
+          currentValue: '0.13.0',
+          depName: 'com.gradle.publish:plugin-publish-plugin',
+          managerData: {
+            fileReplacePosition: 688,
+            packageFile: 'build.gradle',
+          },
+        },
+        {
+          currentValue: '6.0.9.RELEASE',
+          depName: 'org.grails:gorm-hibernate5-spring-boot',
+          managerData: {
+            fileReplacePosition: 1882,
+            packageFile: 'build.gradle',
+          },
+        },
+        {
+          currentValue: '6.0.5',
+          depName: 'mysql:mysql-connector-java',
+          managerData: {
+            fileReplacePosition: 1938,
+            packageFile: 'build.gradle',
+          },
+        },
+        {
+          currentValue: '1.0-groovy-2.4',
+          depName: 'org.spockframework:spock-spring',
+          managerData: {
+            fileReplacePosition: 1996,
+            packageFile: 'build.gradle',
+          },
+        },
+        {
+          currentValue: '1.3',
+          depName: 'org.hamcrest:hamcrest-core',
+          managerData: {
+            fileReplacePosition: 2101,
+            packageFile: 'build.gradle',
+          },
+        },
+        {
+          currentValue: '3.1',
+          depName: 'cglib:cglib-nodep',
+          managerData: {
+            fileReplacePosition: 2189,
+            packageFile: 'build.gradle',
+          },
+        },
+        {
+          currentValue: '3.1.1',
+          depName: 'org.apache.openjpa:openjpa',
+          managerData: {
+            fileReplacePosition: 2295,
+            packageFile: 'build.gradle',
+          },
+        },
+      ]);
     });
   });
 
@@ -1106,6 +1222,25 @@ describe('modules/manager/gradle/parser', () => {
           },
         ],
       });
+    });
+  });
+
+  describe('Java language version', () => {
+    it.each`
+      input                                                                            | output
+      ${'java { toolchain { languageVersion = JavaLanguageVersion.of(22) } }'}         | ${'22'}
+      ${'java { toolchain.languageVersion.set(JavaLanguageVersion.of(16)) }'}          | ${'16'}
+      ${'java.toolchain { languageVersion.set(JavaLanguageVersion.of(17)) }'}          | ${'17'}
+      ${'java.toolchain.languageVersion = JavaLanguageVersion.of(21)'}                 | ${'21'}
+      ${'kotlin { jvmToolchain { languageVersion = JavaLanguageVersion.of(17) } }'}    | ${'17'}
+      ${'kotlin { jvmToolchain { languageVersion.set(JavaLanguageVersion.of(17)) } }'} | ${'17'}
+      ${'kotlin.jvmToolchain { languageVersion.set(JavaLanguageVersion.of(8)) }'}      | ${'8'}
+      ${'kotlin { jvmToolchain(11) }'}                                                 | ${'11'}
+      ${'kotlin.jvmToolchain(16)'}                                                     | ${'16'}
+      ${'dependencies { implementation "com.google.protobuf:protobuf-java:2.17.0" }'}  | ${null}
+    `('$input', ({ input, output }) => {
+      const javaLanguageVersion = parseJavaToolchainVersion(input);
+      expect(javaLanguageVersion).toBe(output);
     });
   });
 });

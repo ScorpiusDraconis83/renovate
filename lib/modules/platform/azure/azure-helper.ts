@@ -1,9 +1,9 @@
 import type { WebApiTeam } from 'azure-devops-node-api/interfaces/CoreInterfaces.js';
-import {
+import type {
   GitCommit,
-  GitPullRequestMergeStrategy,
   GitRef,
 } from 'azure-devops-node-api/interfaces/GitInterfaces.js';
+import { GitPullRequestMergeStrategy } from 'azure-devops-node-api/interfaces/GitInterfaces.js';
 import { logger } from '../../../logger';
 import { streamToString } from '../../../util/streams';
 import { getNewBranchName } from '../util';
@@ -87,15 +87,15 @@ export async function getFile(
       const result = WrappedExceptionSchema.safeParse(fileContent);
       if (result.success) {
         if (result.data.typeKey === 'GitItemNotFoundException') {
-          logger.warn(`Unable to find file ${filePath}`);
+          logger.warn({ filePath }, 'Unable to find file');
           return null;
         }
         if (result.data.typeKey === 'GitUnresolvableToCommitException') {
-          logger.warn(`Unable to find branch ${branchName}`);
+          logger.warn({ branchName }, 'Unable to find branch');
           return null;
         }
       }
-    } catch (error) {
+    } catch {
       // it 's not a JSON, so I send the content directly with the line under
     }
 
@@ -175,7 +175,7 @@ export async function getMergeMethod(
           ] as never as GitPullRequestMergeStrategy,
       )
       .find((p) => p)!;
-  } catch (err) {
+  } catch {
     return GitPullRequestMergeStrategy.NoFastForward;
   }
 }

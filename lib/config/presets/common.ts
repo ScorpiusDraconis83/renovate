@@ -42,6 +42,7 @@ export const removedPresets: Record<string, string | null> = {
     'customManagers:helmChartYamlAppVersions',
   'regexManagers:mavenPropertyVersions': 'customManagers:mavenPropertyVersions',
   'regexManagers:tfvarsVersions': 'customManagers:tfvarsVersions',
+  'workarounds:reduceRepologyServerLoad': null,
 };
 
 const renamedMonorepos: Record<string, string> = {
@@ -73,6 +74,7 @@ const renamedMonorepos: Record<string, string> = {
   Steeltoe: 'steeltoe',
   stryker: 'stryker-js',
   Swashbuckle: 'swashbuckle-aspnetcore',
+  nrwl: 'nx',
 };
 
 for (const [from, to] of Object.entries(renamedMonorepos)) {

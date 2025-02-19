@@ -1,6 +1,7 @@
 import is from '@sindresorhus/is';
 import upath from 'upath';
-import { XmlDocument, XmlElement } from 'xmldoc';
+import type { XmlElement } from 'xmldoc';
+import { XmlDocument } from 'xmldoc';
 import { logger } from '../../../logger';
 import { readLocalFile } from '../../../util/fs';
 import { regEx } from '../../../util/regex';
@@ -25,7 +26,12 @@ function parsePom(raw: string, packageFile: string): XmlDocument | null {
   let project: XmlDocument;
   try {
     project = new XmlDocument(raw);
-  } catch (err) {
+    if (raw.includes('\r\n')) {
+      logger.warn(
+        'Your pom.xml contains windows line endings. This is not supported and may result in parsing issues.',
+      );
+    }
+  } catch {
     logger.debug({ packageFile }, `Failed to parse as XML`);
     return null;
   }
@@ -49,7 +55,7 @@ function parseExtensions(raw: string, packageFile: string): XmlDocument | null {
   let extensions: XmlDocument;
   try {
     extensions = new XmlDocument(raw);
-  } catch (err) {
+  } catch {
     logger.debug({ packageFile }, `Failed to parse as XML`);
     return null;
   }
@@ -218,7 +224,7 @@ function applyPropsInternal(
 
   let fileReplacePosition = dep.fileReplacePosition;
   let propSource = dep.propSource;
-  let groupName: string | null = null;
+  let sharedVariableName: string | null = null;
   const currentValue = dep.currentValue!.replace(
     regEx(/^\${[^}]*?}$/),
     (substr) => {
@@ -226,8 +232,8 @@ function applyPropsInternal(
       // TODO: wrong types here, props is already `MavenProp`
       const propValue = (props as any)[propKey] as MavenProp;
       if (propValue) {
-        if (!groupName) {
-          groupName = propKey;
+        if (!sharedVariableName) {
+          sharedVariableName = propKey;
         }
         fileReplacePosition = propValue.fileReplacePosition;
         propSource =
@@ -255,8 +261,8 @@ function applyPropsInternal(
     currentValue,
   };
 
-  if (groupName) {
-    result.groupName = groupName;
+  if (sharedVariableName) {
+    result.sharedVariableName = sharedVariableName;
   }
 
   if (propSource && depPackageFile !== propSource) {
@@ -392,7 +398,7 @@ export function parseSettings(raw: string): XmlDocument | null {
   let settings: XmlDocument;
   try {
     settings = new XmlDocument(raw);
-  } catch (e) {
+  } catch {
     return null;
   }
   const { name, attr } = settings;

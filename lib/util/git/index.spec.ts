@@ -87,6 +87,15 @@ describe('util/git/index', () => {
 
     await repo.checkoutBranch('renovate/equal_branch', defaultBranch);
 
+    await repo.checkoutBranch(
+      'renovate/branch_with_multiple_authors',
+      defaultBranch,
+    );
+    await repo.addConfig('user.email', 'author1@example.com');
+    await repo.commit('first commit', undefined, { '--allow-empty': null });
+    await repo.addConfig('user.email', 'author2@example.com');
+    await repo.commit('second commit', undefined, { '--allow-empty': null });
+
     await repo.checkout(defaultBranch);
   });
 
@@ -262,6 +271,7 @@ describe('util/git/index', () => {
       await repo.commit('Add submodules');
       await git.initRepo({
         cloneSubmodules: true,
+        cloneSubmodulesFilter: ['file'],
         url: base.path,
       });
       await git.syncGit();
@@ -327,28 +337,64 @@ describe('util/git/index', () => {
     });
 
     it('should return false when branch is not found', async () => {
-      expect(await git.isBranchModified('renovate/not_found')).toBeFalse();
+      expect(
+        await git.isBranchModified('renovate/not_found', defaultBranch),
+      ).toBeFalse();
     });
 
     it('should return false when author matches', async () => {
-      expect(await git.isBranchModified('renovate/future_branch')).toBeFalse();
-      expect(await git.isBranchModified('renovate/future_branch')).toBeFalse();
+      expect(
+        await git.isBranchModified('renovate/future_branch', defaultBranch),
+      ).toBeFalse();
+      expect(
+        await git.isBranchModified('renovate/future_branch', defaultBranch),
+      ).toBeFalse();
     });
 
     it('should return false when author is ignored', async () => {
       git.setUserRepoConfig({
         gitIgnoredAuthors: ['custom@example.com'],
       });
-      expect(await git.isBranchModified('renovate/custom_author')).toBeFalse();
+      expect(
+        await git.isBranchModified('renovate/custom_author', defaultBranch),
+      ).toBeFalse();
+    });
+
+    it('should return true when non-ignored authors commit followed by an ignored author', async () => {
+      git.setUserRepoConfig({
+        gitIgnoredAuthors: ['author1@example.com'],
+      });
+      expect(
+        await git.isBranchModified(
+          'renovate/branch_with_multiple_authors',
+          defaultBranch,
+        ),
+      ).toBeTrue();
+    });
+
+    it('should return false with multiple authors that are each ignored', async () => {
+      git.setUserRepoConfig({
+        gitIgnoredAuthors: ['author1@example.com', 'author2@example.com'],
+      });
+      expect(
+        await git.isBranchModified(
+          'renovate/branch_with_multiple_authors',
+          defaultBranch,
+        ),
+      ).toBeFalse();
     });
 
     it('should return true when custom author is unknown', async () => {
-      expect(await git.isBranchModified('renovate/custom_author')).toBeTrue();
+      expect(
+        await git.isBranchModified('renovate/custom_author', defaultBranch),
+      ).toBeTrue();
     });
 
     it('should return value stored in modifiedCacheResult', async () => {
       modifiedCache.getCachedModifiedResult.mockReturnValue(true);
-      expect(await git.isBranchModified('renovate/future_branch')).toBeTrue();
+      expect(
+        await git.isBranchModified('renovate/future_branch', defaultBranch),
+      ).toBeTrue();
     });
   });
 
@@ -423,6 +469,30 @@ describe('util/git/index', () => {
       await git.deleteBranch('renovate/past_branch');
       const branches = await Git(origin.path).branch({});
       expect(branches.all).not.toContain('renovate/past_branch');
+    });
+
+    it('should add no verify flag', async () => {
+      const rawSpy = jest.spyOn(SimpleGit.prototype, 'raw');
+      await git.deleteBranch('renovate/something');
+      expect(rawSpy).toHaveBeenCalledWith([
+        'push',
+        '--delete',
+        'origin',
+        'renovate/something',
+      ]);
+    });
+
+    it('should not add no verify flag', async () => {
+      const rawSpy = jest.spyOn(SimpleGit.prototype, 'raw');
+      setNoVerify(['push']);
+      await git.deleteBranch('renovate/something');
+      expect(rawSpy).toHaveBeenCalledWith([
+        'push',
+        '--delete',
+        'origin',
+        'renovate/something',
+        '--no-verify',
+      ]);
     });
   });
 
@@ -1014,10 +1084,10 @@ describe('util/git/index', () => {
     it('creates custom section for renovate ref', async () => {
       const commit = git.getBranchCommit('develop')!;
 
-      await git.pushCommitToRenovateRef(commit, 'bar/baz', 'foo');
+      await git.pushCommitToRenovateRef(commit, 'bar/baz');
 
       const renovateRefs = await lsRenovateRefs();
-      expect(renovateRefs).toContain('refs/renovate/foo/bar/baz');
+      expect(renovateRefs).toContain('refs/renovate/branches/bar/baz');
     });
 
     it('clears pushed Renovate refs', async () => {
@@ -1034,11 +1104,16 @@ describe('util/git/index', () => {
     it('clears remote Renovate refs', async () => {
       const commit = git.getBranchCommit('develop')!;
       const tmpGit = Git(tmpDir.path);
-      await tmpGit.raw(['update-ref', 'refs/renovate/aaa', commit]);
-      await tmpGit.raw(['push', '--force', 'origin', 'refs/renovate/aaa']);
+      await tmpGit.raw(['update-ref', 'refs/renovate/branches/aaa', commit]);
+      await tmpGit.raw([
+        'push',
+        '--force',
+        'origin',
+        'refs/renovate/branches/aaa',
+      ]);
 
       await git.pushCommitToRenovateRef(commit, 'bbb');
-      await git.pushCommitToRenovateRef(commit, 'ccc', 'branches');
+      await git.pushCommitToRenovateRef(commit, 'ccc');
 
       const pushSpy = jest.spyOn(SimpleGit.prototype, 'push');
 

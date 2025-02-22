@@ -1,4 +1,5 @@
-import { RenovateConfig, logger, mocked, partial } from '../../../../test/util';
+import type { RenovateConfig } from '../../../../test/util';
+import { logger, mocked, partial } from '../../../../test/util';
 import { GlobalConfig } from '../../../config/global';
 import * as _secrets from '../../../config/secrets';
 import * as _onboarding from '../onboarding/branch';
@@ -60,10 +61,12 @@ describe('workers/repository/init/index', () => {
       );
       await initRepo({});
       expect(logger.logger.warn).toHaveBeenCalledWith(
-        "Configuration option 'filterUnavailableUsers' is not supported on the current platform 'undefined'.",
+        { platform: undefined },
+        "Configuration option 'filterUnavailableUsers' is not supported on the current platform.",
       );
       expect(logger.logger.warn).toHaveBeenCalledWith(
-        "Configuration option 'expandCodeOwnersGroups' is not supported on the current platform 'undefined'.",
+        { platform: undefined },
+        "Configuration option 'expandCodeOwnersGroups' is not supported on the current platform.",
       );
     });
   });

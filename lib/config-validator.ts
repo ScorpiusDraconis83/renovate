@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // istanbul ignore file
 import 'source-map-support/register';
+import './punycode.cjs';
 import { dequal } from 'dequal';
 import { pathExists, readFile } from 'fs-extra';
 import { configFileNames } from './config/app-strings';
@@ -54,10 +55,10 @@ async function validate(
   }
 }
 
-type PackageJson = {
+interface PackageJson {
   renovate?: RenovateConfig;
   'renovate-config'?: Record<string, RenovateConfig>;
-};
+}
 
 (async () => {
   const strictArgIndex = process.argv.indexOf('--strict');
@@ -132,7 +133,7 @@ type PackageJson = {
           );
         }
       }
-    } catch (err) {
+    } catch {
       // ignore
     }
     try {
@@ -147,7 +148,7 @@ type PackageJson = {
           returnVal = 1;
         }
       }
-    } catch (err) {
+    } catch {
       // ignore
     }
   }

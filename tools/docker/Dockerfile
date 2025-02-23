@@ -1,42 +1,81 @@
+# syntax=docker/dockerfile:1.14.0@sha256:0232be24407cc42c983b9b269b1534a3b98eea312aad9464dd0f1a9e547e15a7
+
 ARG BASE_IMAGE_TYPE=slim
 
 # --------------------------------------
 # slim image
 # --------------------------------------
-FROM ghcr.io/renovatebot/base-image:2.11.0@sha256:9cca46a4b9cb6057fd6855211e243fe8bcf6faa1ad60c78cf2baa9d4c6408ce0 AS slim-base
+FROM ghcr.io/renovatebot/base-image:9.43.1@sha256:d2002efa7f32a9b9cd392640e158a1869b8ec95596ece6e651174f1979d13476 AS slim-base
 
 # --------------------------------------
 # full image
 # --------------------------------------
-FROM ghcr.io/renovatebot/base-image:2.11.0-full@sha256:e5df9a40abfd683ef0373be382d66ca36248f033da8703b7bffad54c140b5f3e AS full-base
+FROM ghcr.io/renovatebot/base-image:9.43.1-full@sha256:287fa4e955d2660be8b8b4fb79e7d8a0dda31bbc37f664a83464e743c70bd169 AS full-base
+
+ENV RENOVATE_BINARY_SOURCE=global
 
 # --------------------------------------
 # build image
 # --------------------------------------
-FROM slim-base as build
+FROM --platform=$BUILDPLATFORM ghcr.io/renovatebot/base-image:9.43.1@sha256:d2002efa7f32a9b9cd392640e158a1869b8ec95596ece6e651174f1979d13476 AS build
+
+# We want a specific node version here
+# renovate: datasource=github-releases packageName=containerbase/node-prebuild versioning=node
+RUN install-tool node 22.14.0
+
+# corepack is too buggy 😞
+# renovate: datasource=npm
+RUN install-tool pnpm 10.4.0
 
 WORKDIR /usr/local/renovate
 
-ENV CI=1 npm_config_modules_cache_max_age=0
+ARG TARGETPLATFORM
+ARG TARGETARCH
+ARG BUILDPLATFORM
 
-COPY pnpm-lock.yaml ./
-
-# only fetch deps from lockfile https://pnpm.io/cli/fetch
-RUN corepack pnpm fetch --prod
-
-COPY . ./
-
-# install
 RUN set -ex; \
-  corepack pnpm install --prod --offline --ignore-scripts; \
+  echo "I am running on $BUILDPLATFORM, building for $TARGETPLATFORM"; \
+  uname -a; \
   true
 
-# test
-COPY tools/docker/bin/ /usr/local/bin/
+# replace `amd64` with `x86_64` for `node`
+ENV ARCH=${TARGETARCH/amd64/x86_64}
+ENV ARCH=${ARCH/arm64/aarch64}
+
+# fetch static node binary
 RUN set -ex; \
-  renovate --version; \
-  renovate-config-validator; \
-  node -e "new require('re2')('.*').exec('test')"; \
+  ver=$(node --version); ver=${ver:1} \
+  temp_dir="$(mktemp -d)"; \
+  curl -fsSL "https://github.com/containerbase/node-prebuild/releases/download/${ver}/node-${ver}-${ARCH}.tar.xz" -o ${temp_dir}/node.tar.xz; \
+  bsdtar --strip 1 -C ${temp_dir} -xf ${temp_dir}/node.tar.xz; \
+  cp ${temp_dir}/bin/node ./node; \
+  true
+
+# prepare pnpm env
+ENV CI=1 npm_config_modules_cache_max_age=0 \
+  npm_config_loglevel=info
+
+# replace `amd64` with `x64` for `node`
+ENV ARCH=${TARGETARCH/amd64/x64}
+# set `npm_config_arch` for `prebuild-install`
+# set `npm_config_platform_arch` for `install-artifact-from-github`
+ENV npm_config_arch=${ARCH} npm_config_platform_arch=${ARCH}
+
+COPY --link .npmrc ./
+COPY --link patches ./patches
+COPY --link pnpm-lock.yaml ./
+
+# only fetch deps from lockfile https://pnpm.io/cli/fetch
+RUN set -ex; \
+  pnpm fetch --prod --ignore-scripts; \
+  true
+
+COPY --link . ./
+
+# install npm packages
+RUN set -ex; \
+  pnpm install --prod --offline --ignore-scripts; \
+  pnpm rebuild re2 better-sqlite3; \
   true
 
 # --------------------------------------
@@ -51,27 +90,27 @@ LABEL org.opencontainers.image.source="https://github.com/renovatebot/renovate" 
 
 WORKDIR /usr/src/app
 
-ENV RENOVATE_X_IGNORE_NODE_WARN=true
-
-COPY tools/docker/bin/ /usr/local/bin/
+COPY tools/docker/bin/ /usr/local/sbin/
+ENTRYPOINT ["/usr/local/sbin/renovate-entrypoint.sh"]
 CMD ["renovate"]
 
 ARG RENOVATE_VERSION
 
-COPY --from=build --chown=root:root /usr/local/renovate/ /usr/local/renovate/
+COPY --link --from=build --chown=root:root /usr/local/renovate/ /usr/local/renovate/
 
-# Compabillity, so `config.js` can access renovate and deps
-RUN set -ex; \
-  mkdir /opt/containerbase/tools/renovate; \
-  echo "${RENOVATE_VERSION}" > /opt/containerbase/versions/renovate; \
-  ln -sf /usr/local/renovate /opt/containerbase/tools/renovate/${RENOVATE_VERSION}; \
-  ln -sf /usr/local/renovate/node_modules ./node_modules; \
-  true
+# make our node binary available as last in path
+RUN ln -sf /usr/local/renovate/node /bin/node
 
+# ensure default base and cache directories exist.
+# /runner/cache is an alternative cache directory used in both Docker and microVMs.
+RUN mkdir -p /tmp/renovate/cache/renovate/repository /runner/cache/renovate/repository && \
+  chmod -R 777 /tmp/renovate /runner
+
+# test
 RUN set -ex; \
   renovate --version; \
-  renovate-config-validator; \
-  node -e "new require('re2')('.*').exec('test')"; \
+  pushd /usr/local/renovate/; \
+  node -e "new require('re2')('.*').exec('test');new require('better-sqlite3')(':memory:')"; \
   true
 
 LABEL \
@@ -79,4 +118,4 @@ LABEL \
   org.label-schema.version="${RENOVATE_VERSION}"
 
 # Numeric user ID for the ubuntu user. Used to indicate a non-root user to OpenShift
-USER 1000
+USER 12021

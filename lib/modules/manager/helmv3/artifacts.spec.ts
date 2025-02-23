@@ -1,8 +1,5 @@
-import {
-  ECRClient,
-  GetAuthorizationTokenCommand,
-  GetAuthorizationTokenCommandOutput,
-} from '@aws-sdk/client-ecr';
+import type { GetAuthorizationTokenCommandOutput } from '@aws-sdk/client-ecr';
+import { ECRClient, GetAuthorizationTokenCommand } from '@aws-sdk/client-ecr';
 import { mockClient } from 'aws-sdk-client-mock';
 import { mockDeep } from 'jest-mock-extended';
 import { join } from 'upath';
@@ -158,7 +155,7 @@ describe('modules/manager/helmv3/artifacts', () => {
         packageFileName: 'Chart.yaml',
         updatedDeps: [],
         newPackageFileContent: chartFile,
-        config: { ...config, updateType: 'lockFileMaintenance' },
+        config: { ...config, isLockFileMaintenance: true },
       }),
     ).toMatchObject([
       {
@@ -592,7 +589,7 @@ describe('modules/manager/helmv3/artifacts', () => {
         newPackageFileContent: chartFile,
         config: {
           ...config,
-          updateType: 'lockFileMaintenance',
+          isLockFileMaintenance: true,
           registryAliases: { stable: 'the stable_url', repo1: 'the_repo1_url' },
         },
       }),
@@ -633,7 +630,7 @@ describe('modules/manager/helmv3/artifacts', () => {
         newPackageFileContent: chartFile,
         config: {
           ...config,
-          updateType: 'lockFileMaintenance',
+          isLockFileMaintenance: true,
           registryAliases: { stable: 'the_stable_url', repo1: 'the_repo1_url' },
         },
       }),
@@ -679,7 +676,7 @@ describe('modules/manager/helmv3/artifacts', () => {
         newPackageFileContent: chartFile,
         config: {
           ...config,
-          updateType: 'lockFileMaintenance',
+          isLockFileMaintenance: true,
           registryAliases: {
             stable: 'the_stable_url',
             oci: 'oci://registry.example.com/organization',
@@ -729,7 +726,7 @@ describe('modules/manager/helmv3/artifacts', () => {
         newPackageFileContent: chartFile,
         config: {
           ...config,
-          updateType: 'lockFileMaintenance',
+          isLockFileMaintenance: true,
           registryAliases: {},
         },
       }),
@@ -777,7 +774,7 @@ describe('modules/manager/helmv3/artifacts', () => {
         newPackageFileContent: chartFileECR,
         config: {
           ...config,
-          updateType: 'lockFileMaintenance',
+          isLockFileMaintenance: true,
           registryAliases: {},
         },
       }),
@@ -794,6 +791,9 @@ describe('modules/manager/helmv3/artifacts', () => {
     const ecr = ecrMock.call(0).thisValue as ECRClient;
     expect(await ecr.config.region()).toBe('us-east-1');
     expect(await ecr.config.credentials()).toEqual({
+      $source: {
+        CREDENTIALS_CODE: 'e',
+      },
       accessKeyId: 'some-username',
       secretAccessKey: 'some-password',
       sessionToken: 'some-session-token',
@@ -840,7 +840,7 @@ describe('modules/manager/helmv3/artifacts', () => {
         newPackageFileContent: chartFileECR,
         config: {
           ...config,
-          updateType: 'lockFileMaintenance',
+          isLockFileMaintenance: true,
           registryAliases: {},
         },
       }),
@@ -895,7 +895,7 @@ describe('modules/manager/helmv3/artifacts', () => {
         newPackageFileContent: chartFileECR,
         config: {
           ...config,
-          updateType: 'lockFileMaintenance',
+          isLockFileMaintenance: true,
           registryAliases: {},
         },
       }),
@@ -912,6 +912,9 @@ describe('modules/manager/helmv3/artifacts', () => {
     const ecr = ecrMock.call(0).thisValue as ECRClient;
     expect(await ecr.config.region()).toBe('us-east-1');
     expect(await ecr.config.credentials()).toEqual({
+      $source: {
+        CREDENTIALS_CODE: 'e',
+      },
       accessKeyId: 'some-username',
       secretAccessKey: 'some-password',
       sessionToken: 'some-session-token',
@@ -951,7 +954,7 @@ describe('modules/manager/helmv3/artifacts', () => {
         newPackageFileContent: chartFileECR,
         config: {
           ...config,
-          updateType: 'lockFileMaintenance',
+          isLockFileMaintenance: true,
           registryAliases: {},
         },
       }),
@@ -968,6 +971,9 @@ describe('modules/manager/helmv3/artifacts', () => {
     const ecr = ecrMock.call(0).thisValue as ECRClient;
     expect(await ecr.config.region()).toBe('us-east-1');
     expect(await ecr.config.credentials()).toEqual({
+      $source: {
+        CREDENTIALS_CODE: 'e',
+      },
       accessKeyId: 'some-username',
       secretAccessKey: 'some-password',
       sessionToken: 'some-session-token',
@@ -1003,7 +1009,7 @@ describe('modules/manager/helmv3/artifacts', () => {
         newPackageFileContent: chartFile,
         config: {
           ...config,
-          updateType: 'lockFileMaintenance',
+          isLockFileMaintenance: true,
           registryAliases: {
             repo1:
               'https://gitlab.com/api/v4/projects/xxxxxxx/packages/helm/stable',
@@ -1051,7 +1057,7 @@ describe('modules/manager/helmv3/artifacts', () => {
         newPackageFileContent: chartFileAlias,
         config: {
           ...config,
-          updateType: 'lockFileMaintenance',
+          isLockFileMaintenance: true,
           registryAliases: {
             jetstack: 'https://charts.jetstack.io',
           },

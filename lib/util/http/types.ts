@@ -15,7 +15,7 @@ export type GotOptions = GotBufferOptions | GotJSONOptions;
 export type GotBufferOptions = OptionsOfBufferResponseBody & GotExtraOptions;
 export type GotJSONOptions = OptionsOfJSONResponseBody & GotExtraOptions;
 
-export type GotExtraOptions = {
+export interface GotExtraOptions {
   abortOnError?: boolean;
   abortIgnoreStatusCodes?: number[];
   token?: string;
@@ -24,7 +24,7 @@ export type GotExtraOptions = {
   memCache?: boolean;
   noAuth?: boolean;
   context?: GotContextOptions;
-};
+}
 
 export interface RequestStats {
   method: string;
@@ -36,9 +36,7 @@ export interface RequestStats {
 
 export type OutgoingHttpHeaders = Record<string, string | string[] | undefined>;
 
-export interface GraphqlVariables {
-  [k: string]: unknown;
-}
+export type GraphqlVariables = Record<string, unknown>;
 
 export interface GraphqlOptions {
   variables?: GraphqlVariables;
@@ -91,3 +89,13 @@ export interface HttpResponse<T = string> {
 
 export type Task<T> = () => Promise<T>;
 export type GotTask<T> = Task<HttpResponse<T>>;
+
+export interface ThrottleLimitRule {
+  matchHost: string;
+  throttleMs: number;
+}
+
+export interface ConcurrencyLimitRule {
+  matchHost: string;
+  concurrency: number;
+}

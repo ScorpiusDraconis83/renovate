@@ -5,7 +5,7 @@ import { presets } from './custom-managers';
 
 describe('config/presets/internal/custom-managers', () => {
   describe('Update `$schema` version in biome.json', () => {
-    const customManager = presets['biomeVersions'].customManagers?.[0];
+    const customManager = presets.biomeVersions.customManagers?.[0];
 
     it(`find dependencies in file`, async () => {
       const fileContent = codeBlock`
@@ -46,7 +46,7 @@ describe('config/presets/internal/custom-managers', () => {
 
   describe('Update `_VERSION` variables in Bitbucket Pipelines', () => {
     const customManager =
-      presets['bitbucketPipelinesVersions'].customManagers?.[0];
+      presets.bitbucketPipelinesVersions.customManagers?.[0];
 
     it(`find dependencies in file`, async () => {
       const fileContent = codeBlock`
@@ -166,7 +166,7 @@ describe('config/presets/internal/custom-managers', () => {
   });
 
   describe('Update `_VERSION` variables in Dockerfiles', () => {
-    const customManager = presets['dockerfileVersions'].customManagers?.[0];
+    const customManager = presets.dockerfileVersions.customManagers?.[0];
 
     it(`find dependencies in file`, async () => {
       const fileContent = codeBlock`
@@ -266,7 +266,7 @@ describe('config/presets/internal/custom-managers', () => {
   });
 
   describe('Update `_VERSION` environment variables in GitHub Action files', () => {
-    const customManager = presets['githubActionsVersions'].customManagers?.[0];
+    const customManager = presets.githubActionsVersions.customManagers?.[0];
 
     it(`find dependencies in file`, async () => {
       const fileContent = codeBlock`
@@ -380,7 +380,7 @@ describe('config/presets/internal/custom-managers', () => {
   });
 
   describe('Update `_VERSION` environment variables in GitLab pipeline file', () => {
-    const customManager = presets['gitlabPipelineVersions'].customManagers?.[0];
+    const customManager = presets.gitlabPipelineVersions.customManagers?.[0];
 
     it(`find dependencies in file`, async () => {
       const fileContent = codeBlock`
@@ -455,8 +455,7 @@ describe('config/presets/internal/custom-managers', () => {
   });
 
   describe('Update `appVersion` value in Helm chart Chart.yaml', () => {
-    const customManager =
-      presets['helmChartYamlAppVersions'].customManagers?.[0];
+    const customManager = presets.helmChartYamlAppVersions.customManagers?.[0];
 
     it(`find dependencies in file`, async () => {
       const fileContent = codeBlock`
@@ -515,8 +514,81 @@ describe('config/presets/internal/custom-managers', () => {
     });
   });
 
+  describe('Update `_VERSION` variables in Makefiles', () => {
+    const customManager = presets.makefileVersions.customManagers?.[0];
+
+    it(`find dependencies in file`, async () => {
+      const fileContent = codeBlock`
+        # renovate: datasource=node depName=node versioning=node
+        NODE_VERSION=18.13.0
+        # renovate: datasource=npm depName=pnpm
+        PNPM_VERSION = "7.25.1"
+        # renovate: datasource=npm depName=yarn
+        YARN_VERSION := '3.3.1'
+        # renovate: datasource=custom.hashicorp depName=consul
+        CONSUL_VERSION ?= 1.3.1
+
+        lint:
+        \tnpm install -g pnpm@$(PNPM_VERSION)
+      `;
+
+      const res = await extractPackageFile(
+        fileContent,
+        'gitlab-ci.yml',
+        customManager!,
+      );
+
+      expect(res?.deps).toMatchObject([
+        {
+          currentValue: '18.13.0',
+          datasource: 'node-version',
+          depName: 'node',
+          replaceString:
+            '# renovate: datasource=node depName=node versioning=node\nNODE_VERSION=18.13.0\n',
+          versioning: 'node',
+        },
+        {
+          currentValue: '7.25.1',
+          datasource: 'npm',
+          depName: 'pnpm',
+          replaceString:
+            '# renovate: datasource=npm depName=pnpm\nPNPM_VERSION = "7.25.1"\n',
+        },
+        {
+          currentValue: '3.3.1',
+          datasource: 'npm',
+          depName: 'yarn',
+          replaceString:
+            "# renovate: datasource=npm depName=yarn\nYARN_VERSION := '3.3.1'\n",
+        },
+        {
+          currentValue: '1.3.1',
+          datasource: 'custom.hashicorp',
+          depName: 'consul',
+          replaceString:
+            '# renovate: datasource=custom.hashicorp depName=consul\nCONSUL_VERSION ?= 1.3.1\n',
+        },
+      ]);
+    });
+
+    describe('matches regexes patterns', () => {
+      it.each`
+        path                      | expected
+        ${'Makefile'}             | ${true}
+        ${'makefile'}             | ${true}
+        ${'GNUMakefile'}          | ${true}
+        ${'sub/dir/Makefile'}     | ${true}
+        ${'versions.mk'}          | ${true}
+        ${'Dockerfile'}           | ${false}
+        ${'MakefileGenerator.ts'} | ${false}
+      `('$path', ({ path, expected }) => {
+        expect(regexMatches(path, customManager!.fileMatch)).toBe(expected);
+      });
+    });
+  });
+
   describe('finds dependencies in pom.xml properties', () => {
-    const customManager = presets['mavenPropertyVersions'].customManagers?.[0];
+    const customManager = presets.mavenPropertyVersions.customManagers?.[0];
 
     it(`find dependencies in file`, async () => {
       const fileContent = codeBlock`

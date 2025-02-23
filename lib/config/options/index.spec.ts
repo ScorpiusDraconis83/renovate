@@ -30,7 +30,7 @@ describe('config/options/index', () => {
 
   it('supportedPlatforms should have valid names', () => {
     const opts = getOptions();
-    const platformList = Array.from(platform.getPlatforms().keys());
+    const platformList = Array.from(platform.getPlatformList());
 
     opts
       .filter((option) => option.supportedPlatforms)
@@ -40,5 +40,11 @@ describe('config/options/index', () => {
           expect(platformList).toContain(item);
         }
       });
+  });
+
+  it('should not contain duplicate option names', () => {
+    const optsNames = getOptions().map((option) => option.name);
+    const optsNameSet = new Set(optsNames);
+    expect(optsNames).toHaveLength(optsNameSet.size);
   });
 });

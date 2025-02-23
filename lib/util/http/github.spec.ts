@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer';
 import { codeBlock } from 'common-tags';
 import { DateTime } from 'luxon';
 import * as httpMock from '../../../test/http-mock';
@@ -106,7 +107,7 @@ describe('util/http/github', () => {
         })
         .get(`${url}&page=3`)
         .reply(200, ['e']);
-      const res = await githubApi.getJson(url, { paginate: true });
+      const res = await githubApi.getJsonUnchecked(url, { paginate: true });
       expect(res.body).toEqual(['a', 'b', 'c', 'd', 'e']);
     });
 
@@ -132,7 +133,7 @@ describe('util/http/github', () => {
         )
         .get(`${url}?page=3`)
         .reply(200, { the_field: ['d'], total: 4 });
-      const res: any = await githubApi.getJson('some-url', {
+      const res = await githubApi.getJsonUnchecked<any>('some-url', {
         paginate: true,
         paginationField: 'the_field',
       });
@@ -168,7 +169,7 @@ describe('util/http/github', () => {
         })
         .get(`${url}&page=3`)
         .reply(200, ['e']);
-      const res = await githubApi.getJson(url, {
+      const res = await githubApi.getJsonUnchecked(url, {
         paginate: true,
         repository: 'some/repo',
       });
@@ -205,7 +206,7 @@ describe('util/http/github', () => {
         })
         .get(`${url}&page=3`)
         .reply(200, ['e']);
-      const res = await githubApi.getJson(url, {
+      const res = await githubApi.getJsonUnchecked(url, {
         paginate: true,
         repository: 'some/repo',
         baseUrl: 'https://github.domain.com',
@@ -224,7 +225,9 @@ describe('util/http/github', () => {
         .reply(200, ['a'], {
           link: `<${url}?page=34>; rel="last"`,
         });
-      const res = await githubApi.getJson('some-url', { paginate: true });
+      const res = await githubApi.getJsonUnchecked('some-url', {
+        paginate: true,
+      });
       expect(res).toBeDefined();
       expect(res.body).toEqual(['a']);
     });
@@ -252,7 +255,9 @@ describe('util/http/github', () => {
         })
         .get(`${apiUrl}&page=3`)
         .reply(200, ['e']);
-      const res = await githubApi.getJson(apiUrl, { paginate: true });
+      const res = await githubApi.getJsonUnchecked(apiUrl, {
+        paginate: true,
+      });
       expect(res.body).toEqual(['a', 'b', 'c', 'd', 'e']);
     });
 
@@ -272,7 +277,9 @@ describe('util/http/github', () => {
         })
         .get(`${apiUrl}&page=3`)
         .reply(200, ['e']);
-      const res = await githubApi.getJson(apiUrl, { paginate: true });
+      const res = await githubApi.getJsonUnchecked(apiUrl, {
+        paginate: true,
+      });
       expect(res.body).toEqual(['a', 'b', 'c', 'd', 'e']);
     });
 
@@ -294,7 +301,9 @@ describe('util/http/github', () => {
         })
         .get(`/${apiUrl}&page=3`)
         .reply(200, ['e']);
-      const res = await githubApi.getJson(apiUrl, { paginate: true });
+      const res = await githubApi.getJsonUnchecked(apiUrl, {
+        paginate: true,
+      });
       expect(res.body).toEqual(['a', 'b', 'c', 'd', 'e']);
     });
 
@@ -319,13 +328,13 @@ describe('util/http/github', () => {
             },
             headers,
           );
-        await githubApi.getJson(url);
+        await githubApi.getJsonUnchecked(url);
       }
 
       async function failWithError(error: string | Record<string, unknown>) {
         const url = '/some-url';
         httpMock.scope(githubApiHost).get(url).replyWithError(error);
-        await githubApi.getJson(url);
+        await githubApi.getJsonUnchecked(url);
       }
 
       it('should throw Not found', async () => {
@@ -380,8 +389,7 @@ describe('util/http/github', () => {
 
       it('should throw platform failure for ENOTFOUND, ETIMEDOUT or EAI_AGAIN', async () => {
         const codes = ['ENOTFOUND', 'ETIMEDOUT', 'EAI_AGAIN'];
-        for (let idx = 0; idx < codes.length; idx += 1) {
-          const code = codes[idx];
+        for (const code of codes) {
           await expect(failWithError({ code })).rejects.toThrow(
             EXTERNAL_HOST_ERROR,
           );
@@ -697,10 +705,9 @@ describe('util/http/github', () => {
       const items = await githubApi.queryRepoField(graphqlQuery, 'testItem');
       expect(items).toHaveLength(3);
 
-      const graphqlPageCache = repoCache?.platform?.github?.[
-        'graphqlPageCache'
-      ] as GraphqlPageCache;
-      expect(graphqlPageCache?.['testItem']?.pageSize).toBe(25);
+      const graphqlPageCache = repoCache?.platform?.github
+        ?.graphqlPageCache as GraphqlPageCache;
+      expect(graphqlPageCache?.testItem?.pageSize).toBe(25);
     });
 
     it('expands items count on timeout', async () => {
@@ -726,10 +733,9 @@ describe('util/http/github', () => {
 
       const items = await githubApi.queryRepoField(graphqlQuery, 'testItem');
       expect(items).toHaveLength(3);
-      const graphqlPageCache = repoCache?.platform?.github?.[
-        'graphqlPageCache'
-      ] as GraphqlPageCache;
-      expect(graphqlPageCache?.['testItem']?.pageSize).toBe(84);
+      const graphqlPageCache = repoCache?.platform?.github
+        ?.graphqlPageCache as GraphqlPageCache;
+      expect(graphqlPageCache?.testItem?.pageSize).toBe(84);
     });
 
     it('continues to iterate with a lower page size on error 502', async () => {
@@ -771,10 +777,9 @@ describe('util/http/github', () => {
 
       const items = await githubApi.queryRepoField(graphqlQuery, 'testItem');
       expect(items).toHaveLength(3);
-      const graphqlPageCache = repoCache?.platform?.github?.[
-        'graphqlPageCache'
-      ] as GraphqlPageCache;
-      expect(graphqlPageCache?.['testItem']).toBeUndefined();
+      const graphqlPageCache = repoCache?.platform?.github
+        ?.graphqlPageCache as GraphqlPageCache;
+      expect(graphqlPageCache?.testItem).toBeUndefined();
     });
 
     it('throws on 50x if count < 10', async () => {
@@ -784,6 +789,168 @@ describe('util/http/github', () => {
           count: 9,
         }),
       ).rejects.toThrow(EXTERNAL_HOST_ERROR);
+    });
+  });
+
+  describe('getRawFile()', () => {
+    it('add header and return', async () => {
+      httpMock
+        .scope(githubApiHost)
+        .get('/foo/bar/contents/lore/ipsum.txt')
+        .matchHeader(
+          'accept',
+          'application/vnd.github.raw+json, application/vnd.github.v3+json',
+        )
+        .reply(200, 'foo');
+      await expect(
+        githubApi.getRawTextFile(
+          `${githubApiHost}/foo/bar/contents/lore/ipsum.txt`,
+        ),
+      ).resolves.toMatchObject({
+        body: 'foo',
+      });
+    });
+
+    it('support relative path', async () => {
+      httpMock
+        .scope(githubApiHost)
+        .get('/foo/bar/contents/lore/ipsum.txt')
+        .matchHeader(
+          'accept',
+          'application/vnd.github.raw+json, application/vnd.github.v3+json',
+        )
+        .reply(200, 'foo');
+      await expect(
+        githubApi.getRawTextFile(
+          `${githubApiHost}/foo/bar/contents/foo/../lore/ipsum.txt`,
+        ),
+      ).resolves.toMatchObject({
+        body: 'foo',
+      });
+    });
+
+    it('support default to api.github.com if no baseURL has been supplied', async () => {
+      httpMock
+        .scope(githubApiHost)
+        .get('/foo/bar/contents/lore/ipsum.txt')
+        .matchHeader(
+          'accept',
+          'application/vnd.github.raw+json, application/vnd.github.v3+json',
+        )
+        .reply(200, 'foo');
+      await expect(
+        githubApi.getRawTextFile(`foo/bar/contents/lore/ipsum.txt`),
+      ).resolves.toMatchObject({
+        body: 'foo',
+      });
+    });
+
+    it('support custom host if a baseURL has been supplied', async () => {
+      const customApiHost = 'https://my.comapny.com/api/v3/';
+      httpMock
+        .scope(customApiHost)
+        .get('/foo/bar/contents/lore/ipsum.txt')
+        .matchHeader(
+          'accept',
+          'application/vnd.github.raw+json, application/vnd.github.v3+json',
+        )
+        .reply(200, 'foo');
+      await expect(
+        githubApi.getRawTextFile(`foo/bar/contents/lore/ipsum.txt`, {
+          baseUrl: customApiHost,
+        }),
+      ).resolves.toMatchObject({
+        body: 'foo',
+      });
+    });
+
+    it('support default to api.github.com if no baseURL, but repository has been supplied', async () => {
+      httpMock
+        .scope(githubApiHost)
+        .get('/foo/bar/contents/lore/ipsum.txt')
+        .matchHeader(
+          'accept',
+          'application/vnd.github.raw+json, application/vnd.github.v3+json',
+        )
+        .reply(200, 'foo');
+      await expect(
+        githubApi.getRawTextFile(`lore/ipsum.txt`, {
+          repository: 'foo/bar',
+        }),
+      ).resolves.toMatchObject({
+        body: 'foo',
+      });
+    });
+
+    it('support custom host if a baseURL and repository has been supplied', async () => {
+      const customApiHost = 'https://my.comapny.com/api/v3/';
+      httpMock
+        .scope(customApiHost)
+        .get('/foo/bar/contents/lore/ipsum.txt')
+        .matchHeader(
+          'accept',
+          'application/vnd.github.raw+json, application/vnd.github.v3+json',
+        )
+        .reply(200, 'foo');
+      await expect(
+        githubApi.getRawTextFile(`lore/ipsum.txt`, {
+          baseUrl: customApiHost,
+          repository: 'foo/bar',
+        }),
+      ).resolves.toMatchObject({
+        body: 'foo',
+      });
+    });
+
+    it('support default to api.github.com if content path is used', async () => {
+      httpMock
+        .scope(githubApiHost)
+        .get('/foo/bar/contents/lore/ipsum.txt')
+        .matchHeader(
+          'accept',
+          'application/vnd.github.raw+json, application/vnd.github.v3+json',
+        )
+        .reply(200, 'foo');
+      await expect(
+        githubApi.getRawTextFile(`foo/bar/contents/lore/ipsum.txt`),
+      ).resolves.toMatchObject({
+        body: 'foo',
+      });
+    });
+
+    it('support custom host if content path is used', async () => {
+      const customApiHost = 'https://my.comapny.com/api/v3/';
+      httpMock
+        .scope(customApiHost)
+        .get('/foo/bar/contents/lore/ipsum.txt')
+        .matchHeader(
+          'accept',
+          'application/vnd.github.raw+json, application/vnd.github.v3+json',
+        )
+        .reply(200, 'test');
+      await expect(
+        githubApi.getRawTextFile(`foo/bar/contents/lore/ipsum.txt`, {
+          baseUrl: customApiHost,
+        }),
+      ).resolves.toMatchObject({
+        body: 'test',
+      });
+    });
+
+    it('throw error if a ', async () => {
+      httpMock
+        .scope(githubApiHost)
+        .get('/foo/bar/contents/lore/ipsum.bin')
+        .matchHeader(
+          'accept',
+          'application/vnd.github.raw+json, application/vnd.github.v3+json',
+        )
+        .reply(200, Buffer.from('foo', 'binary'));
+      await expect(
+        githubApi.getRawTextFile(`foo/bar/contents/lore/ipsum.bin`, {
+          responseType: 'buffer',
+        }),
+      ).rejects.toThrow();
     });
   });
 });
